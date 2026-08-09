@@ -8,6 +8,7 @@ import Button from "@/components/Button";
 import { createClient } from "@/lib/supabase/client";
 import { checkActivationKey, redeemActivationKey } from "@/lib/activationKeyDb";
 import { createUserProfileFromSignup } from "@/lib/userProfileDb";
+import { finalizeAccountFromMetadata } from "@/lib/signupFinalization";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,12 +33,22 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     if (mode === "login") {
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      setIsSubmitting(false);
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (signInError) {
+        setIsSubmitting(false);
         setError(signInError.message);
         return;
       }
+
+      // Covers a user who signed up while "Confirm email" was on: the
+      // activation key and name were stashed in their auth metadata at
+      // signup (no session existed yet to redeem the key), and get finished
+      // here on their first login. No-op for everyone else.
+      if (data.user) {
+        await finalizeAccountFromMetadata(data.user).catch(() => {});
+      }
+
+      setIsSubmitting(false);
       router.push("/dashboard");
       router.refresh();
     } else {
@@ -50,7 +61,17 @@ export default function LoginPage() {
         return;
       }
 
-      const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
+            activation_key: trimmedKey,
+          },
+        },
+      });
       if (signUpError) {
         setIsSubmitting(false);
         setError(signUpError.message);
@@ -58,9 +79,10 @@ export default function LoginPage() {
       }
 
       if (!data.user || !data.session) {
-        // Email confirmation is still required on this Supabase project — fall
-        // back to the confirm-by-email flow. The activation key hasn't been
-        // redeemed yet in this case; it stays valid until the user logs in.
+        // Email confirmation is required on this Supabase project — the key
+        // and name are stashed in auth metadata (see signUp options above)
+        // and get redeemed/saved on first login instead, once a session
+        // exists. See finalizeAccountFromMetadata.
         setIsSubmitting(false);
         setSignupMessage("Account created. Check your email to confirm, then log in.");
         setMode("login");
@@ -75,9 +97,12 @@ export default function LoginPage() {
       }
 
       await createUserProfileFromSignup(data.user.id, firstName.trim(), lastName.trim());
+      await supabase.auth
+        .updateUser({ data: { activation_key: null, first_name: null, last_name: null } })
+        .catch(() => {});
 
       setIsSubmitting(false);
-      router.push("/company-profile");
+      router.push("/company-setup");
       router.refresh();
     }
   }

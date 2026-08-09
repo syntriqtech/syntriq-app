@@ -25,7 +25,7 @@ export async function proxy(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
   const isLoginPage = pathname === "/";
-  const isCompanyProfilePage = pathname === "/company-profile";
+  const isCompanySetupPage = pathname === "/company-setup";
   const isApiRoute = pathname.startsWith("/api/");
 
   if (!user && !isLoginPage) {
@@ -37,10 +37,13 @@ export async function proxy(request: NextRequest) {
   }
 
   // Gate every protected page behind company setup until the profile's
-  // required fields are filled in. Exempt the company-profile page itself
-  // (or the gate would redirect-loop) and API routes (they return JSON, not
-  // pages, so redirecting them would break the fetch calls that hit them).
-  if (user && !isApiRoute && !isCompanyProfilePage) {
+  // required fields are filled in. Exempt the setup wizard itself (or the
+  // gate would redirect-loop) and API routes (they return JSON, not pages,
+  // so redirecting them would break the fetch calls that hit them). The
+  // settings page at /company-profile is intentionally NOT exempt — an
+  // incomplete user landing there directly gets sent through the wizard
+  // instead, since that's now the only path for initial setup.
+  if (user && !isApiRoute && !isCompanySetupPage) {
     const { data: companyProfile } = await supabase
       .from("company_profile")
       .select("company_setup_completed")
@@ -48,7 +51,7 @@ export async function proxy(request: NextRequest) {
       .maybeSingle();
 
     if (!companyProfile?.company_setup_completed) {
-      return NextResponse.redirect(new URL("/company-profile", request.url));
+      return NextResponse.redirect(new URL("/company-setup", request.url));
     }
   }
 
