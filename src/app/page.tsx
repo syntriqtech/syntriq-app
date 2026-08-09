@@ -6,14 +6,20 @@ import Image from "next/image";
 import TextField from "@/components/TextField";
 import Button from "@/components/Button";
 import { createClient } from "@/lib/supabase/client";
+import { checkActivationKey, redeemActivationKey } from "@/lib/activationKeyDb";
+import { createUserProfileFromSignup } from "@/lib/userProfileDb";
 
 export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
 
   const [mode, setMode] = useState<"login" | "signup">("login");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [activationKey, setActivationKey] = useState("");
+  const [activationKeyError, setActivationKeyError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signupMessage, setSignupMessage] = useState<string | null>(null);
@@ -22,6 +28,7 @@ export default function LoginPage() {
     event.preventDefault();
     setError(null);
     setSignupMessage(null);
+    setActivationKeyError(null);
     setIsSubmitting(true);
 
     if (mode === "login") {
@@ -34,14 +41,44 @@ export default function LoginPage() {
       router.push("/dashboard");
       router.refresh();
     } else {
-      const { error: signUpError } = await supabase.auth.signUp({ email, password });
-      setIsSubmitting(false);
+      const trimmedKey = activationKey.trim();
+
+      const keyValid = await checkActivationKey(trimmedKey).catch(() => false);
+      if (!keyValid) {
+        setIsSubmitting(false);
+        setActivationKeyError("Invalid or already-used activation key");
+        return;
+      }
+
+      const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
       if (signUpError) {
+        setIsSubmitting(false);
         setError(signUpError.message);
         return;
       }
-      setSignupMessage("Account created. Check your email to confirm, then log in.");
-      setMode("login");
+
+      if (!data.user || !data.session) {
+        // Email confirmation is still required on this Supabase project — fall
+        // back to the confirm-by-email flow. The activation key hasn't been
+        // redeemed yet in this case; it stays valid until the user logs in.
+        setIsSubmitting(false);
+        setSignupMessage("Account created. Check your email to confirm, then log in.");
+        setMode("login");
+        return;
+      }
+
+      const redeemed = await redeemActivationKey(trimmedKey).catch(() => false);
+      if (!redeemed) {
+        setIsSubmitting(false);
+        setActivationKeyError("Invalid or already-used activation key");
+        return;
+      }
+
+      await createUserProfileFromSignup(data.user.id, firstName.trim(), lastName.trim());
+
+      setIsSubmitting(false);
+      router.push("/company-profile");
+      router.refresh();
     }
   }
 
@@ -62,6 +99,30 @@ export default function LoginPage() {
         </div>
 
         <form className="mt-6 flex flex-col gap-4" onSubmit={handleSubmit}>
+          {mode === "signup" && (
+            <div className="grid grid-cols-2 gap-4">
+              <TextField
+                id="firstName"
+                label="First Name"
+                type="text"
+                placeholder="Jane"
+                autoComplete="given-name"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                required
+              />
+              <TextField
+                id="lastName"
+                label="Last Name"
+                type="text"
+                placeholder="Doe"
+                autoComplete="family-name"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                required
+              />
+            </div>
+          )}
           <TextField
             id="email"
             label="Email"
@@ -83,6 +144,22 @@ export default function LoginPage() {
             required
             minLength={6}
           />
+          {mode === "signup" && (
+            <TextField
+              id="activationKey"
+              label="Activation Key"
+              type="text"
+              placeholder="XXXX-XXXX-XXXX"
+              autoComplete="off"
+              value={activationKey}
+              onChange={(e) => {
+                setActivationKey(e.target.value);
+                setActivationKeyError(null);
+              }}
+              required
+              error={activationKeyError ?? undefined}
+            />
+          )}
 
           {error && <p className="text-sm text-red-600">{error}</p>}
           {signupMessage && <p className="text-sm text-teal">{signupMessage}</p>}
@@ -99,6 +176,7 @@ export default function LoginPage() {
               setMode(mode === "login" ? "signup" : "login");
               setError(null);
               setSignupMessage(null);
+              setActivationKeyError(null);
             }}
             className="text-sm text-teal hover:underline"
           >

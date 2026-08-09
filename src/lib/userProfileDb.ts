@@ -38,6 +38,24 @@ export async function saveUserProfile(fullName: string, roleTitle: string): Prom
   if (error) throw new Error(error.message);
 }
 
+export async function createUserProfileFromSignup(
+  userId: string,
+  firstName: string,
+  lastName: string
+): Promise<void> {
+  const supabase = createClient();
+  const fullName = `${firstName} ${lastName}`.trim();
+
+  const { error } = await supabase.from("user_profiles").insert({
+    user_id: userId,
+    first_name: firstName,
+    last_name: lastName,
+    full_name: fullName,
+  });
+
+  if (error) throw new Error(error.message);
+}
+
 export async function saveUserSignature(signatureData: string): Promise<void> {
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
