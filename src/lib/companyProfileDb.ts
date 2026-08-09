@@ -13,6 +13,7 @@ export type CompanyProfile = {
   contactEmail: string;
   contactPhone?: string;
   logoUrl?: string;
+  companySetupCompleted: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -31,6 +32,7 @@ type CompanyProfileRow = {
   contact_email: string;
   contact_phone?: string;
   logo_url?: string;
+  company_setup_completed: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -66,6 +68,7 @@ function rowToCompanyProfile(row: CompanyProfileRow): CompanyProfile {
     contactEmail: row.contact_email,
     contactPhone: row.contact_phone,
     logoUrl: row.logo_url ?? undefined,
+    companySetupCompleted: row.company_setup_completed,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -159,6 +162,12 @@ export async function saveCompanyProfile(
 
   const companyAddress = composeAddress(streetAddress, city, state, zipCode);
 
+  // Matches the fields the company setup form actually marks as required —
+  // address/phone/country are optional there.
+  const companySetupCompleted = Boolean(
+    companyName.trim() && contactName.trim() && contactEmail.trim()
+  );
+
   const payload = {
     company_name: companyName,
     company_address: companyAddress,
@@ -170,6 +179,7 @@ export async function saveCompanyProfile(
     contact_name: contactName,
     contact_email: contactEmail,
     contact_phone: contactPhone || null,
+    company_setup_completed: companySetupCompleted,
     updated_at: new Date().toISOString(),
   };
 

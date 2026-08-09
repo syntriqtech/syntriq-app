@@ -23,7 +23,10 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const isLoginPage = request.nextUrl.pathname === "/";
+  const pathname = request.nextUrl.pathname;
+  const isLoginPage = pathname === "/";
+  const isCompanyProfilePage = pathname === "/company-profile";
+  const isApiRoute = pathname.startsWith("/api/");
 
   if (!user && !isLoginPage) {
     return NextResponse.redirect(new URL("/", request.url));
@@ -31,6 +34,22 @@ export async function proxy(request: NextRequest) {
 
   if (user && isLoginPage) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  // Gate every protected page behind company setup until the profile's
+  // required fields are filled in. Exempt the company-profile page itself
+  // (or the gate would redirect-loop) and API routes (they return JSON, not
+  // pages, so redirecting them would break the fetch calls that hit them).
+  if (user && !isApiRoute && !isCompanyProfilePage) {
+    const { data: companyProfile } = await supabase
+      .from("company_profile")
+      .select("company_setup_completed")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!companyProfile?.company_setup_completed) {
+      return NextResponse.redirect(new URL("/company-profile", request.url));
+    }
   }
 
   return response;
