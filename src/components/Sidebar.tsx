@@ -32,6 +32,7 @@ const DEFAULT_NAV_ITEMS: NavItem[] = [
   { label: "Invoice Cover",      href: "/invoice-cover" },
   { label: "Lien Waivers",       href: "/lien-waivers" },
   { label: "Download Package",   href: "/download-package" },
+  { label: "Reports",            href: "/reports" },
 ];
 
 // ── Icons ────────────────────────────────────────────────────────────────────
