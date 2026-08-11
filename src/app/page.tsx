@@ -14,7 +14,7 @@ export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
 
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -31,6 +31,19 @@ export default function LoginPage() {
     setSignupMessage(null);
     setActivationKeyError(null);
     setIsSubmitting(true);
+
+    if (mode === "forgot") {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      setIsSubmitting(false);
+      if (resetError) {
+        setError(resetError.message);
+        return;
+      }
+      setSignupMessage("Check your email for a link to reset your password.");
+      return;
+    }
 
     if (mode === "login") {
       const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
@@ -119,8 +132,13 @@ export default function LoginPage() {
             priority
           />
           <h1 className="mt-2 text-xl font-semibold text-navy">
-            {mode === "login" ? "Log in" : "Create account"}
+            {mode === "login" ? "Log in" : mode === "signup" ? "Create account" : "Reset password"}
           </h1>
+          {mode === "forgot" && (
+            <p className="text-center text-sm text-gray-500">
+              Enter your email and we&apos;ll send you a link to reset your password.
+            </p>
+          )}
         </div>
 
         <form className="mt-6 flex flex-col gap-4" onSubmit={handleSubmit}>
@@ -158,17 +176,32 @@ export default function LoginPage() {
             onChange={(e) => setEmail(e.target.value)}
             required
           />
-          <TextField
-            id="password"
-            label="Password"
-            type="password"
-            placeholder="••••••••"
-            autoComplete={mode === "login" ? "current-password" : "new-password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={6}
-          />
+          {mode !== "forgot" && (
+            <TextField
+              id="password"
+              label="Password"
+              type="password"
+              placeholder="••••••••"
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
+            />
+          )}
+          {mode === "login" && (
+            <button
+              type="button"
+              onClick={() => {
+                setMode("forgot");
+                setError(null);
+                setSignupMessage(null);
+              }}
+              className="-mt-2 self-end text-sm text-teal hover:underline"
+            >
+              Forgot password?
+            </button>
+          )}
           {mode === "signup" && (
             <TextField
               id="activationKey"
@@ -190,7 +223,13 @@ export default function LoginPage() {
           {signupMessage && <p className="text-sm text-teal">{signupMessage}</p>}
 
           <Button type="submit" className="mt-2" disabled={isSubmitting}>
-            {isSubmitting ? "Please wait…" : mode === "login" ? "Log in" : "Create account"}
+            {isSubmitting
+              ? "Please wait…"
+              : mode === "login"
+              ? "Log in"
+              : mode === "signup"
+              ? "Create account"
+              : "Send reset link"}
           </Button>
         </form>
 
@@ -198,14 +237,18 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => {
-              setMode(mode === "login" ? "signup" : "login");
+              setMode(mode === "signup" ? "login" : mode === "forgot" ? "login" : "signup");
               setError(null);
               setSignupMessage(null);
               setActivationKeyError(null);
             }}
             className="text-sm text-teal hover:underline"
           >
-            {mode === "login" ? "Need an account? Create one" : "Already have an account? Log in"}
+            {mode === "login"
+              ? "Need an account? Create one"
+              : mode === "signup"
+              ? "Already have an account? Log in"
+              : "Back to log in"}
           </button>
         </div>
       </div>

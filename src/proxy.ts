@@ -26,9 +26,15 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isLoginPage = pathname === "/";
   const isCompanySetupPage = pathname === "/company-setup";
+  const isResetPasswordPage = pathname === "/reset-password";
   const isApiRoute = pathname.startsWith("/api/");
 
-  if (!user && !isLoginPage) {
+  // Password-recovery links land here without a session cookie yet — the
+  // client-side Supabase JS still needs to process the URL (hash tokens or
+  // a ?code= param) to establish one. The server never sees that until
+  // after the client mounts, so this page must be reachable while
+  // "unauthenticated" from the middleware's point of view.
+  if (!user && !isLoginPage && !isResetPasswordPage) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
@@ -38,12 +44,14 @@ export async function proxy(request: NextRequest) {
 
   // Gate every protected page behind company setup until the profile's
   // required fields are filled in. Exempt the setup wizard itself (or the
-  // gate would redirect-loop) and API routes (they return JSON, not pages,
-  // so redirecting them would break the fetch calls that hit them). The
-  // settings page at /company-profile is intentionally NOT exempt — an
-  // incomplete user landing there directly gets sent through the wizard
-  // instead, since that's now the only path for initial setup.
-  if (user && !isApiRoute && !isCompanySetupPage) {
+  // gate would redirect-loop), the reset-password page (a user recovering
+  // their password shouldn't get bounced mid-flow), and API routes (they
+  // return JSON, not pages, so redirecting them would break the fetch calls
+  // that hit them). The settings page at /company-profile is intentionally
+  // NOT exempt — an incomplete user landing there directly gets sent
+  // through the wizard instead, since that's now the only path for initial
+  // setup.
+  if (user && !isApiRoute && !isCompanySetupPage && !isResetPasswordPage) {
     const { data: companyProfile } = await supabase
       .from("company_profile")
       .select("company_setup_completed")
