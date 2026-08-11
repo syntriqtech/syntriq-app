@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { useJobs } from "@/hooks/useJobs";
-import { DbJob } from "@/lib/jobs";
+import { DbJob, fetchJobById } from "@/lib/jobs";
 import { computeJobBillingRows } from "@/lib/billingSummary";
 import {
   billingRowToRetentionRow,
@@ -12,8 +12,12 @@ import {
 } from "@/lib/retentionData";
 import {
   fetchAllRetentionReleases,
+  fetchDeletedRetentionReleases,
   recordRetentionPayment,
   undoRetentionPayment,
+  softDeleteRetentionRelease,
+  restoreRetentionRelease,
+  permanentlyDeleteRetentionRelease,
   RetentionRelease,
 } from "@/lib/retentionReleasesDb";
 import { verifyJobPayments, UnpaidApp, UnpaidRelease } from "@/lib/jobPaymentVerification";
@@ -37,7 +41,7 @@ const STATUS_LABEL: Record<string, string> = {
   held: "Held",
   ready_to_bill: "Ready to Bill",
   partial_released: "Partial Release",
-  fully_released: "Fully Released",
+  fully_released: "Retention Submitted",
 };
 
 type ModalState = {
@@ -79,6 +83,13 @@ export default function RetentionPage() {
   const [fundingModal, setFundingModal] = useState<DbJob | null>(null);
   const [confirmUndoId, setConfirmUndoId] = useState<string | null>(null);
   const [isUndoing, setIsUndoing] = useState(false);
+  const [checkingUndoId, setCheckingUndoId] = useState<string | null>(null);
+  const [archivedUndoWarningId, setArchivedUndoWarningId] = useState<string | null>(null);
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [deletedReleases, setDeletedReleases] = useState<RetentionRelease[]>([]);
+  const [showDeletedReleases, setShowDeletedReleases] = useState(false);
+  const [confirmPermDeleteReleaseId, setConfirmPermDeleteReleaseId] = useState<string | null>(null);
 
   function load() {
     if (isLoadingJobs) return;
@@ -122,6 +133,32 @@ export default function RetentionPage() {
   }
 
   useEffect(load, [jobs, isLoadingJobs]);
+
+  // Fetch cancelled (soft-deleted) releases for whichever job row is expanded.
+  useEffect(() => {
+    if (!expandedJobId) {
+      setDeletedReleases([]);
+      setShowDeletedReleases(false);
+      return;
+    }
+    let cancelled = false;
+    fetchDeletedRetentionReleases(expandedJobId)
+      .then((data) => {
+        if (!cancelled) setDeletedReleases(data);
+      })
+      .catch(() => {
+        if (!cancelled) setDeletedReleases([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [expandedJobId]);
+
+  function refreshDeletedReleases() {
+    if (expandedJobId) {
+      fetchDeletedRetentionReleases(expandedJobId).then(setDeletedReleases).catch(() => {});
+    }
+  }
 
   async function openMarkPaid(release: RetentionRelease, jobRow: RetentionRow) {
     setMarkPaid({ release, jobRow });
@@ -182,16 +219,77 @@ export default function RetentionPage() {
     }
   }
 
+  // "Undo" is clicked first — before showing any confirm step, check whether
+  // the release's job is currently archived (this requires a direct lookup:
+  // the jobs list this page already has excludes archived jobs entirely, so
+  // it can't tell us). If archived, show a warning instead of the normal
+  // confirm, since undoing here won't touch the job's archive state.
+  async function handleUndoClick(releaseId: string, jobId: string) {
+    setCheckingUndoId(releaseId);
+    try {
+      const job = await fetchJobById(jobId);
+      if (job?.archivedAt) {
+        setArchivedUndoWarningId(releaseId);
+      } else {
+        setConfirmUndoId(releaseId);
+      }
+    } catch {
+      // If the archive check itself fails, don't block a legitimate undo —
+      // just fall back to the normal confirm.
+      setConfirmUndoId(releaseId);
+    } finally {
+      setCheckingUndoId(null);
+    }
+  }
+
   async function handleUndoPayment(releaseId: string) {
     setIsUndoing(true);
     try {
       await undoRetentionPayment(releaseId);
       setConfirmUndoId(null);
+      setArchivedUndoWarningId(null);
       load();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Could not undo payment.");
     } finally {
       setIsUndoing(false);
+    }
+  }
+
+  // Cancels a release that was billed by mistake and hasn't been paid yet.
+  // Soft-deletes it (matching the pay-app-payments pattern), so it drops out
+  // of "Released" totals immediately but can still be restored for 30 days.
+  async function handleCancelRelease(releaseId: string) {
+    setIsCancelling(true);
+    try {
+      await softDeleteRetentionRelease(releaseId);
+      setConfirmCancelId(null);
+      load();
+      refreshDeletedReleases();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not cancel release.");
+    } finally {
+      setIsCancelling(false);
+    }
+  }
+
+  async function handleRestoreRelease(releaseId: string) {
+    try {
+      await restoreRetentionRelease(releaseId);
+      load();
+      refreshDeletedReleases();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not restore release.");
+    }
+  }
+
+  async function handlePermanentlyDeleteRelease(releaseId: string) {
+    try {
+      await permanentlyDeleteRetentionRelease(releaseId);
+      setConfirmPermDeleteReleaseId(null);
+      refreshDeletedReleases();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not permanently delete release.");
     }
   }
 
@@ -335,7 +433,7 @@ export default function RetentionPage() {
                     </td>
                     <td className="px-5 py-3.5">
                       {row.status === "fully_released" ? (
-                        <span className="text-xs text-gray-400">Fully released</span>
+                        <span className="text-xs text-gray-400">Retention submitted</span>
                       ) : (
                         <button
                           type="button"
@@ -401,16 +499,69 @@ export default function RetentionPage() {
                                   </td>
                                   <td className="px-4 py-2">
                                     {rel.status === "billed" && (
-                                      <button
-                                        type="button"
-                                        onClick={() => openMarkPaid(rel, row)}
-                                        className="rounded-lg border border-green-200 bg-green-50 px-2.5 py-1 text-[10px] font-semibold text-green-700 hover:bg-green-100"
-                                      >
-                                        Mark Paid
-                                      </button>
+                                      confirmCancelId === rel.id ? (
+                                        <span className="flex items-center gap-1.5">
+                                          <span className="text-[10px] text-gray-500">Cancel release?</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleCancelRelease(rel.id)}
+                                            disabled={isCancelling}
+                                            className="text-[10px] font-semibold text-red-600 hover:underline disabled:opacity-50"
+                                          >
+                                            {isCancelling ? "…" : "Yes"}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setConfirmCancelId(null)}
+                                            className="text-[10px] font-semibold text-gray-400 hover:underline"
+                                          >
+                                            No
+                                          </button>
+                                        </span>
+                                      ) : (
+                                        <span className="flex items-center gap-1.5">
+                                          <button
+                                            type="button"
+                                            onClick={() => openMarkPaid(rel, row)}
+                                            className="rounded-lg border border-green-200 bg-green-50 px-2.5 py-1 text-[10px] font-semibold text-green-700 hover:bg-green-100"
+                                          >
+                                            Mark Paid
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setConfirmCancelId(rel.id)}
+                                            className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-semibold text-gray-500 hover:bg-gray-100"
+                                          >
+                                            Cancel
+                                          </button>
+                                        </span>
+                                      )
                                     )}
                                     {rel.status === "paid" && (
-                                      confirmUndoId === rel.id ? (
+                                      archivedUndoWarningId === rel.id ? (
+                                        <div className="flex max-w-[170px] flex-col items-end gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-right">
+                                          <p className="text-[10px] leading-snug text-amber-800">
+                                            This job is archived. Undoing won&apos;t restore it to active status — you&apos;ll need to unarchive it manually if needed.
+                                          </p>
+                                          <span className="flex items-center gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleUndoPayment(rel.id)}
+                                              disabled={isUndoing}
+                                              className="text-[10px] font-semibold text-red-600 hover:underline disabled:opacity-50"
+                                            >
+                                              {isUndoing ? "…" : "Undo anyway"}
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => setArchivedUndoWarningId(null)}
+                                              className="text-[10px] font-semibold text-gray-400 hover:underline"
+                                            >
+                                              Cancel
+                                            </button>
+                                          </span>
+                                        </div>
+                                      ) : confirmUndoId === rel.id ? (
                                         <span className="flex items-center gap-1.5">
                                           <span className="text-[10px] text-gray-500">Undo payment?</span>
                                           <button
@@ -432,10 +583,11 @@ export default function RetentionPage() {
                                       ) : (
                                         <button
                                           type="button"
-                                          onClick={() => setConfirmUndoId(rel.id)}
-                                          className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-semibold text-gray-500 hover:bg-gray-100"
+                                          onClick={() => handleUndoClick(rel.id, row.jobId)}
+                                          disabled={checkingUndoId === rel.id}
+                                          className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-semibold text-gray-500 hover:bg-gray-100 disabled:opacity-50"
                                         >
-                                          Undo
+                                          {checkingUndoId === rel.id ? "…" : "Undo"}
                                         </button>
                                       )
                                     )}
@@ -445,6 +597,80 @@ export default function RetentionPage() {
                             </tbody>
                           </table>
                         </div>
+
+                        {/* Recently cancelled releases — soft-deleted, restorable for 30 days */}
+                        {deletedReleases.length > 0 && (
+                          <div className="mt-3">
+                            <button
+                              type="button"
+                              onClick={() => setShowDeletedReleases(!showDeletedReleases)}
+                              className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 hover:text-gray-600"
+                            >
+                              Recently Cancelled ({deletedReleases.length}) {showDeletedReleases ? "▾" : "▸"}
+                            </button>
+                            {showDeletedReleases && (
+                              <div className="mt-2 rounded-xl border border-gray-100 overflow-hidden opacity-80">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="border-b border-gray-100 text-gray-400 font-semibold uppercase tracking-wide text-[10px]">
+                                      <th className="px-4 py-2 text-left">Release #</th>
+                                      <th className="px-4 py-2 text-left">Date</th>
+                                      <th className="px-4 py-2 text-right">Amount</th>
+                                      <th className="px-4 py-2"></th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-50">
+                                    {deletedReleases.map((rel) => (
+                                      <tr key={rel.id} className="bg-white">
+                                        <td className="px-4 py-2 font-semibold text-navy">#{rel.releaseNumber}</td>
+                                        <td className="px-4 py-2 text-gray-600">{formatDate(rel.releaseDate)}</td>
+                                        <td className="px-4 py-2 text-right tabular-nums text-navy">{currencyFull.format(rel.amountReleased)}</td>
+                                        <td className="px-4 py-2 text-right">
+                                          {confirmPermDeleteReleaseId === rel.id ? (
+                                            <span className="inline-flex items-center gap-2">
+                                              <span className="text-[10px] text-gray-500">Delete forever?</span>
+                                              <button
+                                                type="button"
+                                                onClick={() => handlePermanentlyDeleteRelease(rel.id)}
+                                                className="text-[10px] font-semibold text-red-600 hover:underline"
+                                              >
+                                                Yes
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => setConfirmPermDeleteReleaseId(null)}
+                                                className="text-[10px] text-gray-400 hover:underline"
+                                              >
+                                                No
+                                              </button>
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-3">
+                                              <button
+                                                type="button"
+                                                onClick={() => handleRestoreRelease(rel.id)}
+                                                className="text-[10px] font-semibold text-teal hover:underline"
+                                              >
+                                                Restore
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => setConfirmPermDeleteReleaseId(rel.id)}
+                                                className="text-[10px] font-semibold text-red-500 hover:underline"
+                                              >
+                                                Delete permanently
+                                              </button>
+                                            </span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   )}

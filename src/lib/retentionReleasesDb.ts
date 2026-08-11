@@ -200,3 +200,39 @@ export async function softDeleteRetentionRelease(id: string): Promise<void> {
     .eq("id", id);
   if (error) throw new Error(error.message);
 }
+
+export async function fetchDeletedRetentionReleases(jobId: string): Promise<RetentionRelease[]> {
+  const supabase = createClient();
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const { data, error } = await supabase
+    .from("retention_releases")
+    .select("*")
+    .eq("job_id", jobId)
+    .not("deleted_at", "is", null)
+    .gte("deleted_at", thirtyDaysAgo.toISOString())
+    .order("deleted_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(rowToRelease);
+}
+
+export async function restoreRetentionRelease(id: string): Promise<RetentionRelease> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("retention_releases")
+    .update({ deleted_at: null, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return rowToRelease(data);
+}
+
+export async function permanentlyDeleteRetentionRelease(id: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("retention_releases")
+    .delete()
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}

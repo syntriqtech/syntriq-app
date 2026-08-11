@@ -23,7 +23,7 @@ const STATUS_LABEL: Record<string, string> = {
   held: "Held",
   ready_to_bill: "Ready to Bill",
   partial_released: "Partial Release",
-  fully_released: "Fully Released",
+  fully_released: "Retention Submitted",
 };
 
 export default function RetentionReportPage() {

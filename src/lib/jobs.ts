@@ -77,6 +77,22 @@ export async function fetchJobs(): Promise<DbJob[]> {
   return (data ?? []).map(rowToJob);
 }
 
+// Unlike fetchJobs()/fetchArchivedJobs(), this does NOT filter by archived_at
+// — it's for callers that already have a specific job id and need to know
+// its current archive status regardless of which list it'd normally appear in
+// (e.g. checking if a job was archived before undoing a retention payment).
+export async function fetchJobById(id: string): Promise<DbJob | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("jobs")
+    .select("*")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? rowToJob(data) : null;
+}
+
 export async function fetchArchivedJobs(): Promise<DbJob[]> {
   const supabase = createClient();
   const { data, error } = await supabase
