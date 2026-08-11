@@ -48,7 +48,7 @@ export default function OpenARWidget({
         const withAR = data
           .filter((r) => r.openAR > 0.01)
           .sort((a, b) => b.agingSeverityScore - a.agingSeverityScore)
-          .slice(0, 5);
+          .slice(0, 3);
         setRows(withAR);
       })
       .finally(() => {
