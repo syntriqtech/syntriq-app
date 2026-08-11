@@ -64,6 +64,12 @@ export default function DownloadPackagePage() {
   const [existingPdfUrl, setExistingPdfUrl] = useState<string | null>(null);
   const [saveErrorMsg, setSaveErrorMsg] = useState<string | null>(null);
 
+  // The pay_applications row (if any) matching the selected job + application
+  // number — lets "Record Payment" deep-link straight to it instead of the
+  // generic list. Null until a pay application actually exists for this
+  // combination (e.g. before it's ever been saved/billed).
+  const [currentPayAppId, setCurrentPayAppId] = useState<string | null>(null);
+
   useEffect(() => {
     getContractorInfo().then(setContractor);
     fetchUserProfile().then((p) => {
@@ -130,6 +136,24 @@ export default function DownloadPackagePage() {
       cancelled = true;
     };
   }, [job?.id]);
+
+  useEffect(() => {
+    if (!job) {
+      setCurrentPayAppId(null);
+      return;
+    }
+    let cancelled = false;
+    findPayApplication(job.id, applicationNumber)
+      .then((found) => {
+        if (!cancelled) setCurrentPayAppId(found?.id ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setCurrentPayAppId(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [job?.id, applicationNumber]);
 
   async function handleSelectApplication(number: string) {
     if (!job || number === applicationNumber) return;
@@ -252,6 +276,8 @@ export default function DownloadPackagePage() {
         suggestedAmountDue,
         pendingBlob
       );
+      const saved = await findPayApplication(job.id, applicationNumber);
+      setCurrentPayAppId(saved?.id ?? null);
       setSaveState("saved");
       setTimeout(closeSavePrompt, 3000);
     } catch (err) {
@@ -260,7 +286,32 @@ export default function DownloadPackagePage() {
     }
   }
 
+  // Escape closes the save prompt, matching JobCreatedModal — but not mid-save,
+  // since doSave() is already in flight and closing would just hide progress.
+  useEffect(() => {
+    if (!savePromptOpen || saveState === "saving") return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") closeSavePrompt();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [savePromptOpen, saveState]);
+
   const canDownload = Boolean(job) && Boolean(signatureDataUrl) && claimantTitle.trim().length > 0;
+
+  // Deep-link straight to this job's pay application when one exists (same
+  // route pattern used from the dashboard, jobs page, and pay-applications
+  // list: `/pay-applications/${app.id}`). If no pay application row exists
+  // yet for this job + application number, fall back to the same
+  // job-context hand-off the dashboard's Open AR widget already uses:
+  // stash the job number in sessionStorage and land on the list, which
+  // auto-expands and scrolls to that job.
+  const recordPaymentHref = currentPayAppId ? `/pay-applications/${currentPayAppId}` : "/pay-applications";
+  function handleRecordPaymentNav() {
+    if (!currentPayAppId && job) {
+      sessionStorage.setItem("pay_initial_job", job.jobNumber);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-8">
@@ -421,7 +472,8 @@ export default function DownloadPackagePage() {
           {isGenerating ? "Building package…" : "Download Package"}
         </Button>
         <Link
-          href="/pay-applications"
+          href={recordPaymentHref}
+          onClick={handleRecordPaymentNav}
           className="rounded-lg border border-teal px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/10"
         >
           Record Payment
@@ -431,92 +483,116 @@ export default function DownloadPackagePage() {
         <p className="text-xs text-gray-500">Add a signer name/title and sign above to enable download.</p>
       )}
 
-      {/* ── Save prompt (bottom-right toast card) ──────────────────────────── */}
+      {/* ── Save prompt — centered modal, matching JobCreatedModal / DownloadPackagePromptModal ── */}
       {savePromptOpen && (
-        <div className="fixed bottom-6 right-6 z-50 w-80 rounded-2xl border border-gray-100 bg-white p-5 shadow-xl">
-          {saveState === "ask" && (
-            <>
-              <p className="text-sm font-semibold text-navy">Save this record payment?</p>
-              <p className="mt-1 text-xs text-gray-500">
-                The signed PDF will be saved and available for re-download anytime from Record Payment.
-              </p>
-              <div className="mt-4 flex gap-2">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+          onClick={saveState === "saving" ? undefined : closeSavePrompt}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between border-b border-gray-100 px-6 py-4">
+              <h2 className="text-lg font-bold text-navy">Download Package</h2>
+              {saveState !== "saving" && (
                 <button
                   type="button"
                   onClick={closeSavePrompt}
-                  className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-navy hover:bg-gray-50"
+                  className="text-gray-400 hover:text-gray-600 text-xl leading-none mt-0.5"
                 >
-                  No, skip
+                  ×
                 </button>
-                <button
-                  type="button"
-                  onClick={handleSaveYes}
-                  className="flex-1 rounded-lg bg-teal px-3 py-2 text-sm font-semibold text-white hover:bg-teal/90"
-                >
-                  Yes, save
-                </button>
-              </div>
-            </>
-          )}
-
-          {saveState === "overwrite" && (
-            <>
-              <p className="text-sm font-semibold text-navy">Replace saved PDF?</p>
-              <p className="mt-1 text-xs text-gray-500">
-                A saved PDF already exists for Application #{applicationNumber}. Saving now will replace it.
-              </p>
-              <div className="mt-4 flex gap-2">
-                <button
-                  type="button"
-                  onClick={closeSavePrompt}
-                  className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-navy hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={doSave}
-                  className="flex-1 rounded-lg bg-teal px-3 py-2 text-sm font-semibold text-white hover:bg-teal/90"
-                >
-                  Yes, replace
-                </button>
-              </div>
-            </>
-          )}
-
-          {saveState === "saving" && (
-            <p className="text-sm text-gray-500">Saving PDF…</p>
-          )}
-
-          {saveState === "saved" && (
-            <div className="flex items-start gap-3">
-              <span className="text-lg leading-none text-teal">✓</span>
-              <div>
-                <p className="text-sm font-semibold text-navy">PDF saved</p>
-                <p className="mt-0.5 text-xs text-gray-500">
-                  Available in{" "}
-                  <Link href="/pay-applications" className="font-semibold text-teal hover:underline">
-                    Record Payment
-                  </Link>
-                  .
-                </p>
-              </div>
+              )}
             </div>
-          )}
 
-          {saveState === "error" && (
-            <>
-              <p className="text-sm font-semibold text-red-600">Save failed</p>
-              <p className="mt-1 text-xs text-gray-500">{saveErrorMsg}</p>
-              <button
-                type="button"
-                onClick={closeSavePrompt}
-                className="mt-3 text-sm font-semibold text-teal hover:underline"
-              >
-                Dismiss
-              </button>
-            </>
-          )}
+            <div className="flex flex-col gap-5 p-6">
+              {saveState === "ask" && (
+                <>
+                  <div>
+                    <p className="text-sm font-semibold text-navy">Save this record payment?</p>
+                    <p className="mt-1 text-sm text-gray-600">
+                      The signed PDF will be saved and available for re-download anytime from Record Payment.
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={closeSavePrompt}
+                      className="flex-1 rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-semibold text-navy hover:bg-gray-50"
+                    >
+                      No, skip
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveYes}
+                      className="flex-1 rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal/90"
+                    >
+                      Yes, save
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {saveState === "overwrite" && (
+                <>
+                  <div>
+                    <p className="text-sm font-semibold text-navy">Replace saved PDF?</p>
+                    <p className="mt-1 text-sm text-gray-600">
+                      A saved PDF already exists for Application #{applicationNumber}. Saving now will replace it.
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={closeSavePrompt}
+                      className="flex-1 rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-semibold text-navy hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={doSave}
+                      className="flex-1 rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal/90"
+                    >
+                      Yes, replace
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {saveState === "saving" && (
+                <p className="text-sm text-gray-600">Saving PDF…</p>
+              )}
+
+              {saveState === "saved" && (
+                <div className="flex items-start gap-3">
+                  <span className="text-lg leading-none text-teal">✓</span>
+                  <div>
+                    <p className="text-sm font-semibold text-navy">PDF saved</p>
+                    <p className="mt-0.5 text-sm text-gray-600">
+                      Available in{" "}
+                      <Link href={recordPaymentHref} onClick={handleRecordPaymentNav} className="font-semibold text-teal hover:underline">
+                        Record Payment
+                      </Link>
+                      .
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {saveState === "error" && (
+                <>
+                  <p className="text-sm font-semibold text-red-600">Save failed</p>
+                  <p className="text-sm text-gray-600">{saveErrorMsg}</p>
+                  <button
+                    type="button"
+                    onClick={closeSavePrompt}
+                    className="self-start text-sm font-semibold text-teal hover:underline"
+                  >
+                    Dismiss
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
