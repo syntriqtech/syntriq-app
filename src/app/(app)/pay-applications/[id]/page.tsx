@@ -51,6 +51,11 @@ export default function PayApplicationDetailPage() {
   // Billing details (computed from SOV)
   const [billedToDate, setBilledToDate] = useState(0);
   const [retentionHeld, setRetentionHeld] = useState(0);
+  // Job-wide retention held to date — same figure the Retention tab shows
+  // (latest application's cumulative retention for the job). Equals
+  // retentionHeld above whenever this IS the latest application; only
+  // differs when viewing an older, superseded application.
+  const [jobRetentionHeld, setJobRetentionHeld] = useState(0);
   const [currentPaymentDue, setCurrentPaymentDue] = useState(0);
   const [lineItems, setLineItems] = useState<SOVLineItem[]>([]);
   const [changeOrders, setChangeOrders] = useState<SOVLineItem[]>([]);
@@ -90,6 +95,21 @@ export default function PayApplicationDetailPage() {
           setLineItems(lines);
           setChangeOrders(cos);
 
+          // Job-wide retention held to date, matching how the Retention tab
+          // computes it (computeJobBillingRows in billingSummary.ts): the
+          // latest application's cumulative retention for this job. Reuse
+          // this application's own totals when it IS the latest — no need
+          // to refetch its SOV a second time.
+          const applicationOptions = await fetchApplicationOptions(foundJob.id);
+          const latestAppNumber = applicationOptions[applicationOptions.length - 1]?.applicationNumber;
+          if (!latestAppNumber || latestAppNumber === payAppData.applicationNumber) {
+            setJobRetentionHeld(totals.retention);
+          } else {
+            const { lines: latestLines, changeOrders: latestCos } = await fetchSovItems(foundJob.id, latestAppNumber);
+            const latestComputed = [...latestLines, ...latestCos].map((line) => computeLine(line, cwRate, smRate));
+            setJobRetentionHeld(sumLines(latestComputed).retention);
+          }
+
           // Calculate current payment due
           const earnedLessRetainage = totals.totalCompleted - totals.retention;
           const prevCerts = previousCertificates(allLines, cwRate);
@@ -120,8 +140,25 @@ export default function PayApplicationDetailPage() {
 
   async function handleRecordPayment(e: React.FormEvent) {
     e.preventDefault();
-    if (!payApp) return;
+    if (!payApp || !job) return;
     setRecordError(null);
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)) {
+      setRecordError("Enter a valid payment date.");
+      return;
+    }
+    if (paymentDate > todayIso) {
+      setRecordError("Payment date can't be in the future.");
+      return;
+    }
+    if (paymentDate < minPaymentDate) {
+      setRecordError(
+        job.startDate
+          ? `Payment date can't be before the job start date (${formatDate(job.startDate)}).`
+          : `Payment date can't be before ${formatDate(minPaymentDate)}.`
+      );
+      return;
+    }
 
     const enteredAmount = Number(amountPaid) || 0;
     if (enteredAmount > balance + 0.01) {
@@ -186,6 +223,14 @@ export default function PayApplicationDetailPage() {
   }
 
   async function handleRestorePayment(paymentId: string) {
+    setRecordError(null);
+    const target = deletedPayments.find((p) => p.id === paymentId);
+    if (target && totalPaid + target.amountPaid > amountDue + 0.01) {
+      setRecordError(
+        `Restoring this payment would overpay the application. Amount due is ${currency.format(amountDue)}; already paid is ${currency.format(totalPaid)}.`
+      );
+      return;
+    }
     try {
       await restorePayment(paymentId);
       const [updated, deleted] = await Promise.all([
@@ -233,6 +278,18 @@ export default function PayApplicationDetailPage() {
   const amountDue = currentPaymentDue;
   const balance = amountDue - totalPaid;
 
+  // Bound the payment date field: never in the future, and never before the
+  // job's start date. Jobs don't always have a start date on record, so when
+  // it's missing we fall back to a 5-year window instead of leaving the
+  // minimum unbounded.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const fallbackMinDate = (() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 5);
+    return d.toISOString().slice(0, 10);
+  })();
+  const minPaymentDate = job.startDate || fallbackMinDate;
+
   return (
     <div className="flex flex-col gap-6">
       {/* Header with tabs */}
@@ -251,16 +308,6 @@ export default function PayApplicationDetailPage() {
             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_BADGE_STYLE[payApp.status]}`}>
               {STATUS_LABEL[payApp.status]}
             </span>
-            {(payApp.status === "submitted" || payApp.status === "revised") && (
-              <button
-                type="button"
-                onClick={handleMarkCertified}
-                disabled={isCertifying}
-                className="rounded-lg border border-teal px-3 py-1.5 text-xs font-semibold text-teal hover:bg-teal/10 disabled:opacity-50"
-              >
-                {isCertifying ? "Marking certified…" : "Mark certified"}
-              </button>
-            )}
             {(payApp.status === "certified" || payApp.status === "paid") && (
               <p className="text-xs text-gray-500">
                 {currency.format(totalPaid)} of {currency.format(amountDue)} paid
@@ -395,7 +442,7 @@ export default function PayApplicationDetailPage() {
             <h2 className="text-base font-bold text-navy">Record Payment</h2>
 
             {/* Payment summary strip */}
-            <div className="mt-4 grid grid-cols-3 divide-x divide-gray-100 rounded-xl border border-gray-100 bg-gray-50">
+            <div className="mt-4 grid grid-cols-4 divide-x divide-gray-100 rounded-xl border border-gray-100 bg-gray-50">
               <div className="px-4 py-3">
                 <p className="text-[11px] text-gray-400">Amount due</p>
                 <p className="mt-0.5 text-sm font-bold text-navy">{currency.format(amountDue)}</p>
@@ -410,14 +457,27 @@ export default function PayApplicationDetailPage() {
                   {balance > 0.01 ? currency.format(balance) : "Paid in full"}
                 </p>
               </div>
+              <div className="px-4 py-3">
+                <p className="text-[11px] text-gray-400">Retention held</p>
+                <p className="mt-0.5 text-sm font-bold text-navy">{currency.format(retentionHeld)}</p>
+                <p className="mt-0.5 text-[10px] text-gray-400">{currency.format(jobRetentionHeld)} job to date</p>
+              </div>
             </div>
 
             {payApp.status !== "certified" && payApp.status !== "paid" ? (
               <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
                 <p className="text-sm font-semibold text-amber-800">This application isn&apos;t certified yet.</p>
                 <p className="mt-1 text-xs text-amber-700">
-                  Payments can only be recorded once a pay application is marked certified. Use the &quot;Mark certified&quot; button above.
+                  Mark certified to enable payments.
                 </p>
+                <button
+                  type="button"
+                  onClick={handleMarkCertified}
+                  disabled={isCertifying}
+                  className="mt-3 rounded-lg bg-[#1D8F96] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1D8F96]/90 disabled:opacity-50"
+                >
+                  {isCertifying ? "Marking certified…" : "Mark certified"}
+                </button>
               </div>
             ) : balance <= 0.01 ? (
               <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-4">
@@ -434,6 +494,8 @@ export default function PayApplicationDetailPage() {
                     id="paymentDate"
                     type="date"
                     required
+                    min={minPaymentDate}
+                    max={todayIso}
                     value={paymentDate}
                     onChange={(e) => setPaymentDate(e.target.value)}
                   />
