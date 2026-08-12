@@ -1,6 +1,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { JobSetup } from "@/lib/jobSetupData";
+import { formatRetentionInvoiceNumber } from "@/lib/retentionReleasesDb";
 import {
   NAVY,
   BORDER,
@@ -70,7 +71,7 @@ export function buildRetentionReleaseCoverDoc(data: RetentionReleaseCoverData) {
   doc.setFontSize(9);
   const headerValueOffset = Math.max(...headerLabels.map((l) => doc.getTextWidth(l))) + 10;
 
-  drawHeaderField(doc, "INVOICE:", `RET-${releaseNumber}`, headerX, headerY, "—", headerValueOffset);
+  drawHeaderField(doc, "INVOICE:", formatRetentionInvoiceNumber(job.jobNumber, releaseNumber), headerX, headerY, "—", headerValueOffset);
   headerY += 14;
   drawHeaderField(doc, "INVOICE DATE:", formatDate(invoiceDate), headerX, headerY, "—", headerValueOffset);
   headerY += 14;

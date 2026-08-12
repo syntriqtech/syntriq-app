@@ -21,6 +21,7 @@ import {
   RetentionRelease,
 } from "@/lib/retentionReleasesDb";
 import { verifyJobPayments, UnpaidApp, UnpaidRelease } from "@/lib/jobPaymentVerification";
+import { regenerateRetentionBillingPackage } from "@/lib/retentionBillingPackagePdf";
 import RetentionReleaseWizard from "@/components/RetentionReleaseWizard";
 import FundingQuestionnaireModal from "@/components/FundingQuestionnaireModal";
 import { formatDate } from "@/lib/dateUtils";
@@ -91,6 +92,7 @@ export default function RetentionPage() {
   const [deletedReleases, setDeletedReleases] = useState<RetentionRelease[]>([]);
   const [showDeletedReleases, setShowDeletedReleases] = useState(false);
   const [confirmPermDeleteReleaseId, setConfirmPermDeleteReleaseId] = useState<string | null>(null);
+  const [downloadingReleaseId, setDownloadingReleaseId] = useState<string | null>(null);
 
   function load() {
     if (isLoadingJobs) return;
@@ -306,6 +308,22 @@ export default function RetentionPage() {
       refreshDeletedReleases();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Could not permanently delete release.");
+    }
+  }
+
+  // Re-downloads the invoice + waiver PDF for an existing release, billed
+  // or paid, from any past session — not just the one just created by the
+  // wizard (which only offers "Download Again" within that same session).
+  async function handleDownloadPackage(release: RetentionRelease, jobId: string) {
+    const fullJob = jobs.find((j) => j.id === jobId);
+    if (!fullJob) return;
+    setDownloadingReleaseId(release.id);
+    try {
+      await regenerateRetentionBillingPackage(release, fullJob);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not generate package.");
+    } finally {
+      setDownloadingReleaseId(null);
     }
   }
 
@@ -655,6 +673,16 @@ export default function RetentionPage() {
                                         </button>
                                       )
                                     )}
+                                    <div className="mt-1 flex justify-end">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDownloadPackage(rel, row.jobId)}
+                                        disabled={downloadingReleaseId === rel.id}
+                                        className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-semibold text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+                                      >
+                                        {downloadingReleaseId === rel.id ? "Building…" : "Download Package"}
+                                      </button>
+                                    </div>
                                   </td>
                                 </tr>
                                 );

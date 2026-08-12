@@ -1,6 +1,59 @@
 import { createClient } from "@/lib/supabase/client";
+import { autoMarkBillingThisMonthIfCurrent } from "@/lib/billingCheckinDb";
 
 export type RetentionReleaseStatus = "draft" | "billed" | "paid";
+
+// The invoice number as shown on the retention release's own cover PDF:
+// {jobNumber}-RET-{releaseNumber}, e.g. "7314-RET-1". Mirrors how the pay
+// application invoice cover formats its own INVOICE field
+// ({jobNumber}-{applicationNumber}) — job-number prefixing is reserved for
+// the actual invoice document field; every other in-app reference to a
+// release (tables, tooltips, confirmation text) stays the bare "RET-#",
+// matching how pay application numbers are shown everywhere except their
+// own invoice cover. releaseNumber itself (the per-job sequence) is
+// unaffected — this only changes how it's displayed, never renumbers it.
+export function formatRetentionInvoiceNumber(jobNumber: string, releaseNumber: number): string {
+  return `${jobNumber}-RET-${releaseNumber}`;
+}
+
+export type ParsedRetentionAuditLine = {
+  item: string;
+  description: string;
+  retentionHeld: number;
+  releaseAmount: number;
+  pctComplete: number;
+};
+
+// The Retention Release Wizard embeds a JSON snapshot (waiver kind + the
+// per-line retention basis it computed at billing time) in the release's
+// notes field, appended after any free-text note the user typed, separated
+// by "\n---\n". Parsing it back out lets a release's invoice be regenerated
+// later using the SAME basis it was originally billed against, rather than
+// recomputing from today's (possibly since-changed) SOV data. Returns null
+// for releases with no such snapshot (created before the wizard tracked
+// this, or with plain-text-only notes).
+export function parseRetentionReleaseAudit(
+  notes: string
+): { waiverKind: string; lines: ParsedRetentionAuditLine[] } | null {
+  try {
+    const parsed = JSON.parse(notes.split("---")[1]?.trim() ?? notes);
+    if (parsed?.wizard === "v1" && Array.isArray(parsed.lines)) {
+      return {
+        waiverKind: parsed.waiverKind ?? "",
+        lines: parsed.lines.map((l: Partial<ParsedRetentionAuditLine>) => ({
+          item: l.item ?? "",
+          description: l.description ?? "",
+          retentionHeld: Number(l.retentionHeld ?? 0),
+          releaseAmount: Number(l.releaseAmount ?? 0),
+          pctComplete: Number(l.pctComplete ?? 0),
+        })),
+      };
+    }
+  } catch {
+    // notes doesn't contain the wizard's JSON snapshot — not an error
+  }
+  return null;
+}
 
 export type RetentionRelease = {
   id: string;
@@ -21,6 +74,10 @@ export type RetentionRelease = {
   // amountReleased, which isn't a real discrepancy yet.
   discrepancy: number;
   discrepancyNote: string;
+  // The period this release covers (like a pay application's "period to"),
+  // distinct from releaseDate (when it was billed). Null for releases
+  // created before this field was tracked.
+  releasedThrough: string | null;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -40,6 +97,7 @@ type ReleaseRow = {
   payment_reference: string;
   discrepancy: string | number;
   discrepancy_note: string;
+  released_through: string | null;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -60,6 +118,7 @@ function rowToRelease(row: ReleaseRow): RetentionRelease {
     paymentReference: row.payment_reference ?? "",
     discrepancy: Number(row.discrepancy ?? 0),
     discrepancyNote: row.discrepancy_note ?? "",
+    releasedThrough: row.released_through ?? null,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -109,6 +168,7 @@ export type CreateReleaseInput = {
   isFinal: boolean;
   notes?: string;
   status?: RetentionReleaseStatus;
+  releasedThrough?: string;
 };
 
 export async function createRetentionRelease(input: CreateReleaseInput): Promise<RetentionRelease> {
@@ -131,6 +191,7 @@ export async function createRetentionRelease(input: CreateReleaseInput): Promise
       is_final: input.isFinal,
       notes: input.notes ?? "",
       status: input.status ?? "billed",
+      released_through: input.releasedThrough ?? input.releaseDate,
     })
     .select()
     .single();
@@ -188,7 +249,14 @@ export async function recordRetentionPayment(
     .select()
     .single();
   if (error) throw new Error(error.message);
-  return rowToRelease(data);
+  const result = rowToRelease(data);
+  // Only the actual payment counts as "billing this month" — a billed-but-
+  // unpaid release can still be cancelled (see Cancel flow), so it shouldn't
+  // answer the check-in question until it's actually paid in full.
+  if (fullyPaid) {
+    autoMarkBillingThisMonthIfCurrent(result.jobId, paymentDate).catch(() => {});
+  }
+  return result;
 }
 
 export async function undoRetentionPayment(id: string): Promise<RetentionRelease> {

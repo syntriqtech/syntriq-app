@@ -403,6 +403,7 @@ export default function RetentionReleaseWizard({
         isFinal,
         notes: finalNotes,
         status: "billed",
+        releasedThrough,
       });
 
       setSavedReleaseNumber(release.releaseNumber);
