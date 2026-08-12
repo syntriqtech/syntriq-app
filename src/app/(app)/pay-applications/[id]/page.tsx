@@ -196,6 +196,10 @@ export default function PayApplicationDetailPage() {
   async function handleMarkCertified() {
     if (!payApp) return;
     setCertifyError(null);
+    if (currentPaymentDue <= 0) {
+      setCertifyError("This pay application totals $0.00 — add billing amounts before certifying.");
+      return;
+    }
     setIsCertifying(true);
     try {
       const updated = await certifyPayApplication(payApp.id);
