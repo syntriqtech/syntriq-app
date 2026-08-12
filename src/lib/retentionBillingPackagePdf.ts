@@ -21,7 +21,12 @@ export async function exportRetentionBillingPackage(data: RetentionBillingPackag
   ];
   const mergedBytes = await mergePdfSources(sourceBytes);
   const invoiceNumber = formatRetentionInvoiceNumber(data.cover.job.jobNumber, data.cover.releaseNumber);
-  return downloadPdfBlob(mergedBytes, `${invoiceNumber}.pdf`);
+  // Distinguishes a re-download after Mark Paid (unconditional waiver) from
+  // the original package generated at billing time (conditional waiver), so
+  // the two don't collide/overwrite each other on disk.
+  const isUnconditional = data.lienWaivers.some((w) => w.kind.startsWith("unconditional"));
+  const filename = isUnconditional ? `${invoiceNumber}-Unconditional.pdf` : `${invoiceNumber}.pdf`;
+  return downloadPdfBlob(mergedBytes, filename);
 }
 
 const VALID_WAIVER_KINDS: LienWaiverKind[] = [
@@ -30,6 +35,16 @@ const VALID_WAIVER_KINDS: LienWaiverKind[] = [
   "conditional-final",
   "unconditional-final",
 ];
+
+// Once a release is actually paid, its originally-billed conditional
+// waiver is superseded — Mark Paid confirms what the conditional waiver
+// only promised. Symmetric for both progress and final releases, since the
+// same underlying capability (buildLienWaiverDoc) already supports both
+// unconditional kinds identically.
+const UNCONDITIONAL_EQUIVALENT: Partial<Record<LienWaiverKind, LienWaiverKind>> = {
+  "conditional-progress": "unconditional-progress",
+  "conditional-final": "unconditional-final",
+};
 
 function endOfMonth(dateStr: string): string {
   const d = new Date(`${dateStr}T00:00:00`);
@@ -48,11 +63,21 @@ function endOfMonth(dateStr: string): string {
 // current saved profile, same as what a fresh wizard run defaults to.
 export async function regenerateRetentionBillingPackage(release: RetentionRelease, job: DbJob): Promise<Blob> {
   const audit = parseRetentionReleaseAudit(release.notes);
-  const waiverKind = VALID_WAIVER_KINDS.includes(audit?.waiverKind as LienWaiverKind)
+  const billedKind = VALID_WAIVER_KINDS.includes(audit?.waiverKind as LienWaiverKind)
     ? (audit!.waiverKind as LienWaiverKind)
     : release.isFinal
     ? "conditional-final"
     : "conditional-progress";
+
+  // Only becomes available once status is actually "paid" (set by Mark
+  // Paid, never by billing/creating the release) — before that, this
+  // always regenerates the same conditional waiver it was billed with,
+  // matching current behavior exactly.
+  const isPaid = release.status === "paid";
+  const waiverKind = isPaid ? UNCONDITIONAL_EQUIVALENT[billedKind] ?? billedKind : billedKind;
+  // Reflects what was actually received, not what was originally billed —
+  // matters for a short-paid release under the discrepancy tracking.
+  const waiverAmount = isPaid ? release.amountPaid : release.amountReleased;
 
   // Prefer the billing-time snapshot; fall back to treating the release
   // amount as its own basis (100%) if no snapshot is available at all.
@@ -95,7 +120,7 @@ export async function regenerateRetentionBillingPackage(release: RetentionReleas
         data: {
           job,
           claimantName: contractor.company,
-          amountOfCheck: release.amountReleased,
+          amountOfCheck: waiverAmount,
           throughDate: releasedThrough,
           signatureDate: release.paymentDate ?? release.releaseDate,
           claimantTitle: formatSignerLine(userProfile),
