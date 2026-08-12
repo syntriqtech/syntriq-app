@@ -50,29 +50,31 @@ export async function loadLogoForPdf(logoUrl: string): Promise<LogoData | null> 
   }
 }
 
-const NAVY = "#1F3864";
+// Exported so other cover-style PDF builders (e.g. the retention release
+// invoice) can match this document's look without re-declaring it.
+export const NAVY = "#1F3864";
 const LABEL_GRAY = "#404040";
-const BORDER = "#000000";
-const MARGIN = 40;
-const PAGE_WIDTH = 612;
+export const BORDER = "#000000";
+export const MARGIN = 40;
+export const PAGE_WIDTH = 612;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 
-function currency(value: number) {
+export function currency(value: number) {
   return value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 }
 
-function percent(value: number) {
+export function percent(value: number) {
   return `${value.toFixed(2)}%`;
 }
 
-function formatDate(value: string) {
+export function formatDate(value: string) {
   if (!value) return "—";
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 }
 
-function addDays(value: string, days: number) {
+export function addDays(value: string, days: number) {
   if (!value) return "—";
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return value;
@@ -80,7 +82,7 @@ function addDays(value: string, days: number) {
   return date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 }
 
-function drawHeaderField(doc: jsPDF, label: string, value: string, x: number, y: number, fallback = "—") {
+export function drawHeaderField(doc: jsPDF, label: string, value: string, x: number, y: number, fallback = "—") {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(LABEL_GRAY);
@@ -93,13 +95,13 @@ function drawHeaderField(doc: jsPDF, label: string, value: string, x: number, y:
 
 // Splits "Street, Suite, City, ST 00000" into ["Street, Suite", "City, ST 00000"].
 // Falls back to returning the whole string as line 1 if no US city/state/zip is found.
-function splitAddress(address: string): [string, string] {
+export function splitAddress(address: string): [string, string] {
   const match = address.match(/^(.*),\s*([^,]+,\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?)$/);
   if (match) return [match[1].trim(), match[2].trim()];
   return [address, ""];
 }
 
-function drawAddressBlock(doc: jsPDF, label: string, lines: string[], x: number, y: number) {
+export function drawAddressBlock(doc: jsPDF, label: string, lines: string[], x: number, y: number) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
   doc.setTextColor(LABEL_GRAY);
@@ -115,7 +117,7 @@ function drawAddressBlock(doc: jsPDF, label: string, lines: string[], x: number,
   return lineY;
 }
 
-function drawSummaryRow(doc: jsPDF, label: string, value: string, y: number, options?: { bold?: boolean }) {
+export function drawSummaryRow(doc: jsPDF, label: string, value: string, y: number, options?: { bold?: boolean }) {
   doc.setFont("helvetica", options?.bold ? "bold" : "normal");
   doc.setFontSize(9.5);
   doc.setTextColor(options?.bold ? NAVY : "#000000");

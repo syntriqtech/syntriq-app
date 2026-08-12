@@ -5,7 +5,10 @@ import { DbJob } from "@/lib/jobs";
 import { createRetentionRelease } from "@/lib/retentionReleasesDb";
 import { fetchApplicationOptions, fetchSovItems } from "@/lib/sovLineItemsDb";
 import { computeLine, ComputedLine } from "@/lib/payAppMath";
-import { exportLienWaiverPdf, LienWaiverKind } from "@/lib/lienWaiverPdf";
+import { LienWaiverKind } from "@/lib/lienWaiverPdf";
+import { exportRetentionBillingPackage } from "@/lib/retentionBillingPackagePdf";
+import { loadLogoForPdf, LogoData } from "@/lib/invoiceCoverPdf";
+import { useCompanyProfile } from "@/hooks/useCompanyProfile";
 import { getContractorInfo } from "@/lib/sampleUser";
 import { fetchUserProfile, saveUserSignature, formatSignerLine } from "@/lib/userProfileDb";
 import AdoptSignatureModal from "@/components/AdoptSignatureModal";
@@ -67,6 +70,12 @@ function suggestRelease(line: ComputedLine, job: DbJob): number | null {
 function parseAmt(s: string): number {
   const v = parseFloat(s.replace(/[^0-9.]/g, ""));
   return isNaN(v) ? 0 : v;
+}
+
+function endOfCurrentMonth(): string {
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  return end.toISOString().slice(0, 10);
 }
 
 // ─── Mini retention gauge bar ─────────────────────────────────────────────────
@@ -146,13 +155,26 @@ export default function RetentionReleaseWizard({
   onClose,
   onCreated,
 }: Props) {
+  const { profile } = useCompanyProfile();
+
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [lineReleases, setLineReleases] = useState<LineRelease[]>([]);
   const [isLoadingLines, setIsLoadingLines] = useState(true);
   const [linesError, setLinesError] = useState<string | null>(null);
 
+  // The job's latest pay application's metadata — the SOV snapshot this
+  // release's retention was computed against. Referenced on the retention
+  // invoice only as a traceability note ("accrued through Pay App #N"), not
+  // reproduced as a full SOV table.
+  const [latestApp, setLatestApp] = useState<{ applicationNumber: string; applicationDate: string; periodTo: string } | null>(null);
+
   const [waiverKind, setWaiverKind] = useState<WaiverKind>("conditional-progress");
   const [releaseDate, setReleaseDate] = useState(() => new Date().toISOString().slice(0, 10));
+  // Distinct from releaseDate: what period the released retention covers
+  // (like a pay application's "period to"), not when this bill is generated.
+  // Defaults to the end of the current month, but is its own field from
+  // then on — never silently derived from releaseDate.
+  const [releasedThrough, setReleasedThrough] = useState(endOfCurrentMonth);
   const [claimantTitle, setClaimantTitle] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -183,6 +205,14 @@ export default function RetentionReleaseWizard({
         const { lines, changeOrders } = await fetchSovItems(job.id, latest.applicationNumber);
         const cwRate = job.retentionRateCW / 100;
         const smRate = job.retentionRateSM / 100;
+
+        if (!cancelled) {
+          setLatestApp({
+            applicationNumber: latest.applicationNumber,
+            applicationDate: latest.applicationDate,
+            periodTo: latest.periodTo,
+          });
+        }
 
         const allItems = [
           ...lines.map((l) => ({ ...l })),
@@ -263,7 +293,7 @@ export default function RetentionReleaseWizard({
     totalRelease > 0 &&
     totalRelease <= remaining + 0.005;
 
-  const step3Valid = releaseDate.length > 0;
+  const step3Valid = releaseDate.length > 0 && releasedThrough.length > 0;
 
   // ─── Handlers ───────────────────────────────────────────────────────────────
 
@@ -297,6 +327,55 @@ export default function RetentionReleaseWizard({
     );
   }
 
+  // Builds and downloads the retention release's own invoice (RET-#, this
+  // release's basis/%/amount only — no full SOV) plus its lien waiver.
+  // Reuses the same PDF merge pipeline, logo loading, and lien-waiver
+  // builder as the standalone Download Package flow; only the cover
+  // content and numbering are specific to a retention release.
+  //
+  // releaseNumber is passed in explicitly rather than read from
+  // savedReleaseNumber state: when called from handleConfirm, the state
+  // setter that stores it hasn't re-rendered yet, so the state value in
+  // this closure would still be stale.
+  async function downloadPackage(releaseNumber: number) {
+    let logo: LogoData | undefined;
+    if (profile?.logoUrl) {
+      logo = (await loadLogoForPdf(profile.logoUrl)) ?? undefined;
+    }
+
+    await exportRetentionBillingPackage({
+      cover: {
+        job,
+        releaseNumber,
+        invoiceDate: releaseDate,
+        releasedThrough,
+        isFinal,
+        retentionBasis: totalHeldSelected,
+        releaseAmount: totalRelease,
+        sourceApplicationNumber: latestApp?.applicationNumber ?? "—",
+        sourcePeriodTo: latestApp?.periodTo ?? releasedThrough,
+        logo,
+      },
+      lienWaivers: [
+        {
+          kind: waiverKind as LienWaiverKind,
+          data: {
+            job,
+            claimantName: contractorName,
+            amountOfCheck: totalRelease,
+            throughDate: releasedThrough,
+            signatureDate: releaseDate,
+            claimantTitle,
+            unpaidProgressDates: "",
+            unpaidProgressAmounts: "",
+            disputedExtrasAmount: 0,
+            signatureDataUrl: signatureDataUrl ?? undefined,
+          },
+        },
+      ],
+    });
+  }
+
   async function handleConfirm() {
     setSaveError(null);
     setIsSaving(true);
@@ -328,22 +407,8 @@ export default function RetentionReleaseWizard({
 
       setSavedReleaseNumber(release.releaseNumber);
 
-      // Download lien waiver PDF immediately
-      exportLienWaiverPdf(
-        {
-          job,
-          claimantName: contractorName,
-          amountOfCheck: totalRelease,
-          throughDate: releaseDate,
-          signatureDate: releaseDate,
-          claimantTitle,
-          unpaidProgressDates: "",
-          unpaidProgressAmounts: "",
-          disputedExtrasAmount: 0,
-          signatureDataUrl: signatureDataUrl ?? undefined,
-        },
-        waiverKind as LienWaiverKind
-      );
+      // Download the retention release invoice + waiver immediately
+      await downloadPackage(release.releaseNumber);
 
       onCreated();
     } catch (err) {
@@ -353,21 +418,11 @@ export default function RetentionReleaseWizard({
     }
   }
 
-  function downloadWaiverAgain() {
-    exportLienWaiverPdf(
-      {
-        job,
-        claimantName: contractorName,
-        amountOfCheck: totalRelease,
-        throughDate: releaseDate,
-        signatureDate: releaseDate,
-        claimantTitle,
-        unpaidProgressDates: "",
-        unpaidProgressAmounts: "",
-        disputedExtrasAmount: 0,
-      },
-      waiverKind as LienWaiverKind
-    );
+  function handleDownloadAgain() {
+    if (savedReleaseNumber === null) return;
+    downloadPackage(savedReleaseNumber).catch((err) => {
+      alert(err instanceof Error ? err.message : "Could not download package.");
+    });
   }
 
   // ─── Step content ────────────────────────────────────────────────────────────
@@ -670,11 +725,22 @@ export default function RetentionReleaseWizard({
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Release / through date</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Invoice / billing date</label>
+            <p className="mb-1 text-xs text-gray-400">When this retention release is being billed. Defaults to today.</p>
             <input
               type="date"
               value={releaseDate}
               onChange={(e) => setReleaseDate(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-navy focus:border-teal focus:outline-none focus:ring-1 focus:ring-teal"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Released through</label>
+            <p className="mb-1 text-xs text-gray-400">The date this retention release covers, e.g. &quot;released through 05/31/2026.&quot;</p>
+            <input
+              type="date"
+              value={releasedThrough}
+              onChange={(e) => setReleasedThrough(e.target.value)}
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-navy focus:border-teal focus:outline-none focus:ring-1 focus:ring-teal"
             />
           </div>
@@ -742,7 +808,7 @@ export default function RetentionReleaseWizard({
               {fmt.format(totalRelease)} — {isFinal ? "Final release" : "Partial release"}
             </p>
             <p className="mt-1 text-xs text-green-600">
-              Lien waiver PDF downloaded. Status: Billed (awaiting payment).
+              Retention invoice RET-{savedReleaseNumber} and lien waiver downloaded. Status: Billed (awaiting payment).
             </p>
           </div>
 
@@ -756,10 +822,10 @@ export default function RetentionReleaseWizard({
           <div className="flex flex-col gap-2">
             <button
               type="button"
-              onClick={downloadWaiverAgain}
+              onClick={handleDownloadAgain}
               className="w-full rounded-lg border border-navy px-4 py-2.5 text-sm font-semibold text-navy hover:bg-navy/5"
             >
-              Download Lien Waiver PDF Again
+              Download Retention Invoice Again
             </button>
             <button
               type="button"
@@ -833,7 +899,7 @@ export default function RetentionReleaseWizard({
           <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Lien Waiver</p>
             <p className="font-semibold text-navy">{waiverLabel}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{releaseDate}</p>
+            <p className="text-xs text-gray-500 mt-0.5">Released through {releasedThrough || "—"}</p>
           </div>
           <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">AR Impact</p>
@@ -856,7 +922,9 @@ export default function RetentionReleaseWizard({
               Add {fmt.format(totalRelease)} to AR aging so it appears in your outstanding receivables.
             </li>
             <li>
-              Download a <strong>{waiverLabel}</strong> lien waiver PDF, pre-filled and ready for your signature.
+              Download a retention release invoice (<strong>RET-#</strong>, released through{" "}
+              {releasedThrough || "—"}) and a <strong>{waiverLabel}</strong> lien waiver, pre-filled and
+              ready for your signature.
             </li>
           </ul>
           <p className="mt-2 text-xs text-amber-700">
@@ -872,7 +940,7 @@ export default function RetentionReleaseWizard({
           disabled={isSaving}
           className="w-full rounded-xl bg-navy px-6 py-3 text-sm font-bold text-white hover:bg-navy/90 disabled:opacity-50"
         >
-          {isSaving ? "Saving…" : `Confirm & Download Waiver — ${fmt.format(totalRelease)}`}
+          {isSaving ? "Saving…" : `Confirm & Download Package — ${fmt.format(totalRelease)}`}
         </button>
       </div>
     );
