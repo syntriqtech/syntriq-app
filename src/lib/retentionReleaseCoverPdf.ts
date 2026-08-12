@@ -57,15 +57,28 @@ export function buildRetentionReleaseCoverDoc(data: RetentionReleaseCoverData) {
 
   let headerY = 36;
   const headerX = PAGE_WIDTH - MARGIN - 230;
-  drawHeaderField(doc, "INVOICE:", `RET-${releaseNumber}`, headerX, headerY);
+
+  // drawHeaderField's default value column (x + 95) is sized for the pay
+  // application cover's own labels and must stay untouched there. This
+  // box's longest label, "RELEASED THROUGH:", doesn't fit inside 95pt, so
+  // compute a column width from this box's actual labels and use it for
+  // every row here — that keeps all five values aligned at one fixed
+  // x-position regardless of label length, without changing the shared
+  // pay-app cover's spacing.
+  const headerLabels = ["INVOICE:", "INVOICE DATE:", "RELEASED THROUGH:", "RELEASE TYPE:", "DUE DATE:"];
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  const headerValueOffset = Math.max(...headerLabels.map((l) => doc.getTextWidth(l))) + 10;
+
+  drawHeaderField(doc, "INVOICE:", `RET-${releaseNumber}`, headerX, headerY, "—", headerValueOffset);
   headerY += 14;
-  drawHeaderField(doc, "INVOICE DATE:", formatDate(invoiceDate), headerX, headerY);
+  drawHeaderField(doc, "INVOICE DATE:", formatDate(invoiceDate), headerX, headerY, "—", headerValueOffset);
   headerY += 14;
-  drawHeaderField(doc, "RELEASED THROUGH:", formatDate(releasedThrough), headerX, headerY);
+  drawHeaderField(doc, "RELEASED THROUGH:", formatDate(releasedThrough), headerX, headerY, "—", headerValueOffset);
   headerY += 14;
-  drawHeaderField(doc, "RELEASE TYPE:", isFinal ? "Final" : "Partial", headerX, headerY);
+  drawHeaderField(doc, "RELEASE TYPE:", isFinal ? "Final" : "Partial", headerX, headerY, "—", headerValueOffset);
   headerY += 14;
-  drawHeaderField(doc, "DUE DATE:", addDays(invoiceDate, 31), headerX, headerY);
+  drawHeaderField(doc, "DUE DATE:", addDays(invoiceDate, 31), headerX, headerY, "—", headerValueOffset);
 
   let blockY = 140;
   const [toStreet, toCityStateZip] = splitAddress(job.customerAddress);

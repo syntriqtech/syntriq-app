@@ -82,7 +82,15 @@ export function addDays(value: string, days: number) {
   return date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 }
 
-export function drawHeaderField(doc: jsPDF, label: string, value: string, x: number, y: number, fallback = "—") {
+export function drawHeaderField(
+  doc: jsPDF,
+  label: string,
+  value: string,
+  x: number,
+  y: number,
+  fallback = "—",
+  valueOffset = 95
+) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(LABEL_GRAY);
@@ -90,7 +98,7 @@ export function drawHeaderField(doc: jsPDF, label: string, value: string, x: num
   doc.setFont("helvetica", "normal");
   doc.setTextColor("#000000");
   const display = value || fallback;
-  if (display) doc.text(display, x + 95, y);
+  if (display) doc.text(display, x + valueOffset, y);
 }
 
 // Splits "Street, Suite, City, ST 00000" into ["Street, Suite", "City, ST 00000"].
