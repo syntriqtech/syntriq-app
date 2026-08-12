@@ -908,6 +908,16 @@ export default function RetentionPage() {
                           <input type="text" inputMode="decimal" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)}
                             className="w-full rounded-lg border border-gray-200 pl-7 pr-3 py-2 text-sm text-navy focus:border-teal focus:outline-none focus:ring-1 focus:ring-teal" />
                         </div>
+                        <div className="mt-1.5 flex items-center gap-2 text-xs text-gray-500">
+                          <span>Expected: <span className="font-semibold text-navy">{currencyFull.format(markPaid.release.amountReleased)}</span></span>
+                          <button
+                            type="button"
+                            onClick={() => setPaymentAmount(markPaid.release.amountReleased.toFixed(2))}
+                            className="rounded px-1.5 py-0.5 text-teal border border-teal/30 hover:bg-teal/5 font-medium"
+                          >
+                            Use this
+                          </button>
+                        </div>
                       </div>
                       {discrepancyWarning}
                       <div>
@@ -961,6 +971,16 @@ export default function RetentionPage() {
                         onChange={(e) => setPaymentAmount(e.target.value)}
                         className="w-full rounded-lg border border-gray-200 pl-7 pr-3 py-2 text-sm text-navy focus:border-teal focus:outline-none focus:ring-1 focus:ring-teal"
                       />
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-2 text-xs text-gray-500">
+                      <span>Expected: <span className="font-semibold text-navy">{currencyFull.format(markPaid.release.amountReleased)}</span></span>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentAmount(markPaid.release.amountReleased.toFixed(2))}
+                        className="rounded px-1.5 py-0.5 text-teal border border-teal/30 hover:bg-teal/5 font-medium"
+                      >
+                        Use this
+                      </button>
                     </div>
                   </div>
                   {discrepancyWarning}
