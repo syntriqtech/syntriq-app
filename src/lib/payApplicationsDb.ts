@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { autoMarkBillingThisMonthIfCurrent } from "@/lib/billingCheckinDb";
 
 export type PayApplicationStatus = "draft" | "submitted" | "revised" | "certified" | "paid";
 
@@ -90,7 +91,14 @@ export async function markApplicationBilled(
     .select()
     .single();
   if (error) throw error;
-  return rowToPayApplication(data);
+  const result = rowToPayApplication(data);
+  // Billing this application (not just saving a $0 draft) is the sub's own
+  // answer to "are you billing this job this month" — sync Billing
+  // Check-in rather than making them answer it again separately.
+  if (amountBilled > 0) {
+    autoMarkBillingThisMonthIfCurrent(result.jobId, applicationDate).catch(() => {});
+  }
+  return result;
 }
 
 export async function fetchPayApplicationsByJob(jobId: string): Promise<PayApplication[]> {
@@ -211,7 +219,15 @@ export async function updatePayApplicationAmount(
     .select()
     .single();
   if (error) throw new Error(error.message);
-  return rowToPayApplication(data);
+  const result = rowToPayApplication(data);
+  // Same sync as markApplicationBilled, for the "fill in a previously-$0
+  // draft" path: this is the promotion to "submitted", so it counts as the
+  // real billing action. No explicit applicationDate means the date wasn't
+  // being changed here — treat the promotion as happening today.
+  if (promoteFromDraft && amountBilled > 0) {
+    autoMarkBillingThisMonthIfCurrent(result.jobId, applicationDate ?? new Date().toISOString().slice(0, 10)).catch(() => {});
+  }
+  return result;
 }
 
 // Creates a new revision row via the create_pay_application_revision()
@@ -236,7 +252,12 @@ export async function createPayApplicationRevision(
     p_revision_reason: revisionReason,
   });
   if (error) throw new Error(error.message);
-  return rowToPayApplication(data);
+  const result = rowToPayApplication(data);
+  // A revision is a resubmission — always represents active billing on
+  // this job, unlike the plain amount-edit path which only counts once it
+  // actually promotes past draft.
+  autoMarkBillingThisMonthIfCurrent(result.jobId, applicationDate).catch(() => {});
+  return result;
 }
 
 // Marks the current revision certified via the certify_pay_application()

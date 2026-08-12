@@ -10,20 +10,11 @@ import {
   upsertCheckin,
   advanceCheckinMonth,
   deleteCheckin,
+  currentMonth,
+  nextMonth,
 } from "@/lib/billingCheckinDb";
 import { computeAllJobMetrics, JobMetrics } from "@/lib/dashboardMetrics";
 import { fetchChangeOrders } from "@/lib/changeOrdersDb";
-
-function currentMonth(): string {
-  return new Date().toISOString().slice(0, 7);
-}
-
-function nextMonth(yyyyMm: string): string {
-  const [y, m] = yyyyMm.split("-").map(Number);
-  return m === 12
-    ? `${y + 1}-01`
-    : `${y}-${String(m + 1).padStart(2, "0")}`;
-}
 
 function formatMonth(yyyyMm: string): string {
   if (!yyyyMm) return "";
