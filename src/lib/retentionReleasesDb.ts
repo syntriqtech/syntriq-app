@@ -14,6 +14,13 @@ export type RetentionRelease = {
   paymentDate: string | null;
   amountPaid: number;
   paymentReference: string;
+  // Amount released minus amount paid — always derived (a Postgres
+  // generated column), never a value the user enters directly. Positive =
+  // underpaid, negative = overpaid, zero = exact match. Only meaningful once
+  // status is "paid"; for a billed-but-unpaid release this just equals
+  // amountReleased, which isn't a real discrepancy yet.
+  discrepancy: number;
+  discrepancyNote: string;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -31,6 +38,8 @@ type ReleaseRow = {
   payment_date: string | null;
   amount_paid: string | number;
   payment_reference: string;
+  discrepancy: string | number;
+  discrepancy_note: string;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -49,6 +58,8 @@ function rowToRelease(row: ReleaseRow): RetentionRelease {
     paymentDate: row.payment_date,
     amountPaid: Number(row.amount_paid),
     paymentReference: row.payment_reference ?? "",
+    discrepancy: Number(row.discrepancy ?? 0),
+    discrepancyNote: row.discrepancy_note ?? "",
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -132,7 +143,8 @@ export async function recordRetentionPayment(
   amountPaid: number,
   paymentDate: string,
   paymentReference?: string,
-  overrideNote?: string
+  overrideNote?: string,
+  discrepancyNote?: string
 ): Promise<RetentionRelease> {
   const supabase = createClient();
 
@@ -160,6 +172,10 @@ export async function recordRetentionPayment(
     amount_paid: amountPaid,
     payment_date: paymentDate,
     payment_reference: paymentReference?.trim() ?? "",
+    // Only ever set when there's an actual discrepancy (page.tsx clears the
+    // field and doesn't pass this when the amount matches exactly) — this
+    // just guards against a stale note surviving a discrepancy-free payment.
+    discrepancy_note: discrepancyNote?.trim() ?? "",
     status: fullyPaid ? "paid" : "billed",
     updated_at: new Date().toISOString(),
   };
@@ -182,6 +198,10 @@ export async function undoRetentionPayment(id: string): Promise<RetentionRelease
     .update({
       amount_paid: 0,
       payment_date: null,
+      // The discrepancy note explained a specific payment that no longer
+      // exists once undone — clear it so it doesn't linger on a release
+      // that's back to "billed, awaiting payment".
+      discrepancy_note: "",
       status: "billed",
       updated_at: new Date().toISOString(),
     })

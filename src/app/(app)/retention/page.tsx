@@ -79,6 +79,7 @@ export default function RetentionPage() {
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentReference, setPaymentReference] = useState("");
+  const [discrepancyNote, setDiscrepancyNote] = useState("");
   const [isSavingPayment, setIsSavingPayment] = useState(false);
   const [fundingModal, setFundingModal] = useState<DbJob | null>(null);
   const [confirmUndoId, setConfirmUndoId] = useState<string | null>(null);
@@ -167,6 +168,7 @@ export default function RetentionPage() {
     setPaymentDate(new Date().toISOString().slice(0, 10));
     setPaymentAmount("");
     setPaymentReference("");
+    setDiscrepancyNote("");
     try {
       const result = await verifyJobPayments(jobRow.jobId, release.id);
       if (result.ok) {
@@ -184,6 +186,7 @@ export default function RetentionPage() {
     setMarkPaid(null);
     setPaymentAmount("");
     setPaymentReference("");
+    setDiscrepancyNote("");
     setOverrideChecked(false);
   }
 
@@ -204,8 +207,21 @@ export default function RetentionPage() {
       overrideNote = [...outstandingApps, ...outstandingRels].join("; ");
     }
 
+    // Only carry the note through if there's an actual discrepancy — if the
+    // user typed something and then adjusted the amount to match exactly,
+    // the note is moot and shouldn't be saved.
+    const hasDiscrepancy = Math.abs(markPaid.release.amountReleased - amt) > 0.01;
+    const noteToSave = hasDiscrepancy ? discrepancyNote : "";
+
     try {
-      const updated = await recordRetentionPayment(markPaid.release.id, amt, paymentDate, paymentReference, overrideNote);
+      const updated = await recordRetentionPayment(
+        markPaid.release.id,
+        amt,
+        paymentDate,
+        paymentReference,
+        overrideNote,
+        noteToSave
+      );
       const paidJob = jobs.find((j) => j.id === markPaid.jobRow.jobId) ?? null;
       closeMarkPaid();
       load();
@@ -292,6 +308,40 @@ export default function RetentionPage() {
       alert(err instanceof Error ? err.message : "Could not permanently delete release.");
     }
   }
+
+  // Live discrepancy preview for whatever's currently typed in the Mark Paid
+  // form — mirrors the database's generated `discrepancy` column
+  // (amountReleased - amountPaid) once the payment is actually saved.
+  const enteredPaymentAmt = parseFloat(paymentAmount) || 0;
+  const enteredDiscrepancyAmt = markPaid ? markPaid.release.amountReleased - enteredPaymentAmt : 0;
+  const hasEnteredDiscrepancy =
+    markPaid !== null && paymentAmount !== "" && Math.abs(enteredDiscrepancyAmt) > 0.01;
+
+  // Non-blocking — mirrors the stale-lien-waiver warning pattern (an amber
+  // informational note, not a hard stop). Only rendered when a discrepancy
+  // actually exists; the notes field never appears otherwise.
+  const discrepancyWarning =
+    hasEnteredDiscrepancy && markPaid ? (
+      <>
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 leading-relaxed">
+          This is {currencyFull.format(Math.abs(enteredDiscrepancyAmt))}{" "}
+          {enteredDiscrepancyAmt > 0 ? "less than" : "more than"} the release amount of{" "}
+          {currencyFull.format(markPaid.release.amountReleased)}. You can still proceed.
+        </p>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">
+            Reason for discrepancy <span className="font-normal text-gray-400">(optional)</span>
+          </label>
+          <textarea
+            rows={2}
+            value={discrepancyNote}
+            onChange={(e) => setDiscrepancyNote(e.target.value)}
+            placeholder="e.g. GC withheld $5.85 for a backcharge"
+            className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm text-navy placeholder-gray-300 focus:border-teal focus:outline-none focus:ring-1 focus:ring-teal"
+          />
+        </div>
+      </>
+    ) : null;
 
   if (isLoading || isLoadingJobs) {
     return (
@@ -468,16 +518,30 @@ export default function RetentionPage() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                              {row.releases.map((rel) => (
+                              {row.releases.map((rel) => {
+                                const hasDiscrepancy = rel.status === "paid" && Math.abs(rel.discrepancy) > 0.01;
+                                return (
                                 <tr key={rel.id} className="bg-white">
                                   <td className="px-4 py-2 font-semibold text-navy">#{rel.releaseNumber}</td>
                                   <td className="px-4 py-2 text-gray-600">{formatDate(rel.releaseDate)}</td>
                                   <td className="px-4 py-2 text-gray-600">{rel.isFinal ? "Final" : "Partial"}</td>
                                   <td className="px-4 py-2 text-right tabular-nums font-semibold text-navy">{currencyFull.format(rel.amountReleased)}</td>
-                                  <td className="px-4 py-2 text-right tabular-nums text-green-700">
+                                  <td className={`px-4 py-2 text-right tabular-nums ${hasDiscrepancy ? "text-amber-700" : "text-green-700"}`}>
                                     {rel.amountPaid > 0 ? (
                                       <div className="flex flex-col items-end gap-0.5">
-                                        <span>{currencyFull.format(rel.amountPaid)}</span>
+                                        <span className="inline-flex items-center justify-end gap-1">
+                                          {currencyFull.format(rel.amountPaid)}
+                                          {hasDiscrepancy && (
+                                            <span className="group relative inline-flex cursor-help">
+                                              <span aria-hidden="true">⚠</span>
+                                              <span className="pointer-events-none absolute right-0 top-full z-10 mt-1 hidden w-56 rounded-lg border border-gray-200 bg-white p-2 text-left text-[10px] font-normal leading-snug text-gray-700 shadow-lg group-hover:block">
+                                                {rel.discrepancy > 0 ? "Underpaid" : "Overpaid"} by{" "}
+                                                {currencyFull.format(Math.abs(rel.discrepancy))}.
+                                                {rel.discrepancyNote ? ` ${rel.discrepancyNote}` : " No reason noted."}
+                                              </span>
+                                            </span>
+                                          )}
+                                        </span>
                                         {rel.paymentReference && (
                                           <span className="text-[10px] font-normal text-gray-400 tabular-nums">
                                             Ref: {rel.paymentReference}
@@ -593,7 +657,8 @@ export default function RetentionPage() {
                                     )}
                                   </td>
                                 </tr>
-                              ))}
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
@@ -844,6 +909,7 @@ export default function RetentionPage() {
                             className="w-full rounded-lg border border-gray-200 pl-7 pr-3 py-2 text-sm text-navy focus:border-teal focus:outline-none focus:ring-1 focus:ring-teal" />
                         </div>
                       </div>
+                      {discrepancyWarning}
                       <div>
                         <label className="mb-1 block text-xs font-medium text-gray-700">Payment date</label>
                         <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)}
@@ -897,6 +963,7 @@ export default function RetentionPage() {
                       />
                     </div>
                   </div>
+                  {discrepancyWarning}
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Payment date</label>
                     <input

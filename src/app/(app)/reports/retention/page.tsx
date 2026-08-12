@@ -26,6 +26,18 @@ const STATUS_LABEL: Record<string, string> = {
   fully_released: "Retention Submitted",
 };
 
+// Net discrepancy for a job — the sum of (amountReleased - amountPaid)
+// across its paid releases, plus the individual releases that actually
+// have one (for the tooltip). Billed-but-unpaid releases are excluded:
+// their amountPaid is just 0 by default, which isn't a real discrepancy.
+function computeJobDiscrepancy(row: RetentionRow) {
+  const discrepantReleases = row.releases.filter(
+    (r) => r.status === "paid" && Math.abs(r.discrepancy) > 0.01
+  );
+  const amount = discrepantReleases.reduce((sum, r) => sum + r.discrepancy, 0);
+  return { amount, discrepantReleases };
+}
+
 export default function RetentionReportPage() {
   const { jobs, isLoading: isLoadingJobs } = useJobs();
   const { profile } = useCompanyProfile();
@@ -35,6 +47,7 @@ export default function RetentionReportPage() {
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sortDiscrepancyFirst, setSortDiscrepancyFirst] = useState(false);
 
   useEffect(() => {
     if (isLoadingJobs) return;
@@ -62,6 +75,13 @@ export default function RetentionReportPage() {
     };
   }, [jobs, isLoadingJobs]);
 
+  // When toggled on, surfaces jobs with a non-zero net discrepancy first —
+  // that's the actionable list office staff need to scan. Off by default,
+  // preserving the existing status-based ordering from computeRetentionReport.
+  const displayRows = sortDiscrepancyFirst
+    ? [...rows].sort((a, b) => Math.abs(computeJobDiscrepancy(b).amount) - Math.abs(computeJobDiscrepancy(a).amount))
+    : rows;
+
   const asOfLabel = asOf.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
   function handleExportCsv() {
@@ -77,8 +97,16 @@ export default function RetentionReportPage() {
         { header: "Remaining", accessor: (r: RetentionRow) => r.remaining.toFixed(2) },
         { header: "% Billed", accessor: (r: RetentionRow) => r.percentBilled.toFixed(1) },
         { header: "Status", accessor: (r: RetentionRow) => STATUS_LABEL[r.status] ?? r.status },
+        { header: "Discrepancy", accessor: (r: RetentionRow) => computeJobDiscrepancy(r).amount.toFixed(2) },
+        {
+          header: "Discrepancy Notes",
+          accessor: (r: RetentionRow) =>
+            computeJobDiscrepancy(r)
+              .discrepantReleases.map((rel) => `RET-${rel.releaseNumber}: ${rel.discrepancyNote || "no reason noted"}`)
+              .join("; "),
+        },
       ],
-      rows
+      displayRows
     );
   }
 
@@ -100,15 +128,17 @@ export default function RetentionReportPage() {
             { header: "Retention Held", align: "right" },
             { header: "Released", align: "right" },
             { header: "Remaining", align: "right" },
+            { header: "Discrepancy", align: "right" },
             { header: "Status" },
           ],
-          rows: rows.map((r) => [
+          rows: displayRows.map((r) => [
             `${r.jobNumber} — ${r.jobName || "—"}`,
             r.customer,
             currency.format(r.contractSum),
             currency.format(r.retentionHeld),
             currency.format(r.totalReleased),
             currency.format(r.remaining),
+            currency.format(computeJobDiscrepancy(r).amount),
             STATUS_LABEL[r.status] ?? r.status,
           ]),
           totalsRow: [
@@ -118,6 +148,7 @@ export default function RetentionReportPage() {
             currency.format(summary.totalHeld),
             currency.format(summary.totalReleased),
             currency.format(summary.totalRemaining),
+            currency.format(rows.reduce((sum, r) => sum + computeJobDiscrepancy(r).amount, 0)),
             "",
           ],
           generatedAt: asOf,
@@ -140,11 +171,24 @@ export default function RetentionReportPage() {
             <h1 className="text-2xl font-bold text-navy">Retention Held vs. Released</h1>
             <p className="mt-1 text-sm text-gray-500">Point-in-time snapshot as of {asOfLabel}.</p>
           </div>
-          <ReportExportButtons
-            onExportCsv={handleExportCsv}
-            onExportPdf={handleExportPdf}
-            disabled={rows.length === 0 || isExporting}
-          />
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setSortDiscrepancyFirst((v) => !v)}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                sortDiscrepancyFirst
+                  ? "border-amber-300 bg-amber-50 text-amber-800"
+                  : "border-gray-200 text-gray-500 hover:bg-gray-50"
+              }`}
+            >
+              {sortDiscrepancyFirst ? "✓ " : ""}Discrepancies first
+            </button>
+            <ReportExportButtons
+              onExportCsv={handleExportCsv}
+              onExportPdf={handleExportPdf}
+              disabled={rows.length === 0 || isExporting}
+            />
+          </div>
         </div>
       </div>
 
@@ -183,12 +227,16 @@ export default function RetentionReportPage() {
                 <th className="px-5 py-3 text-right">Retention Held</th>
                 <th className="px-5 py-3 text-right">Released</th>
                 <th className="px-5 py-3 text-right">Remaining</th>
+                <th className="px-5 py-3 text-right">Discrepancy</th>
                 <th className="px-5 py-3 text-right">% Billed</th>
                 <th className="px-5 py-3">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {rows.map((row) => (
+              {displayRows.map((row) => {
+                const { amount: discrepancyAmt, discrepantReleases } = computeJobDiscrepancy(row);
+                const hasDiscrepancy = discrepantReleases.length > 0;
+                return (
                 <tr key={row.jobId}>
                   <td className="px-5 py-3.5">
                     <div className="font-semibold text-navy">{row.jobName || <span className="text-amber-600">⚠ No name</span>}</div>
@@ -199,6 +247,25 @@ export default function RetentionReportPage() {
                   <td className="px-5 py-3.5 text-right tabular-nums font-semibold text-navy">{currency.format(row.retentionHeld)}</td>
                   <td className="px-5 py-3.5 text-right tabular-nums text-green-700">{row.totalReleased > 0 ? currency.format(row.totalReleased) : <span className="text-gray-300">—</span>}</td>
                   <td className="px-5 py-3.5 text-right tabular-nums text-navy">{currency.format(row.remaining)}</td>
+                  <td className={`px-5 py-3.5 text-right tabular-nums ${hasDiscrepancy ? "text-amber-700 font-semibold" : "text-gray-300"}`}>
+                    {hasDiscrepancy ? (
+                      <span className="group relative inline-flex cursor-help items-center gap-1">
+                        {currency.format(discrepancyAmt)}
+                        <span aria-hidden="true">⚠</span>
+                        <span className="pointer-events-none absolute right-0 top-full z-10 mt-1 hidden w-64 rounded-lg border border-gray-200 bg-white p-2 text-left text-[10px] font-normal leading-snug text-gray-700 shadow-lg group-hover:block">
+                          {discrepantReleases.map((rel) => (
+                            <p key={rel.id} className="mb-1 last:mb-0">
+                              <span className="font-semibold text-navy">RET-{rel.releaseNumber}:</span>{" "}
+                              {rel.discrepancy > 0 ? "underpaid" : "overpaid"} by {currency.format(Math.abs(rel.discrepancy))}.
+                              {rel.discrepancyNote ? ` ${rel.discrepancyNote}` : " No reason noted."}
+                            </p>
+                          ))}
+                        </span>
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="px-5 py-3.5 text-right tabular-nums text-gray-600">{pct.format(row.percentBilled / 100)}</td>
                   <td className="px-5 py-3.5">
                     <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-600">
@@ -206,7 +273,8 @@ export default function RetentionReportPage() {
                     </span>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
             <tfoot>
               <tr className="border-t border-gray-100 bg-gray-50 font-semibold text-navy">
@@ -214,6 +282,9 @@ export default function RetentionReportPage() {
                 <td className="px-5 py-3 text-right tabular-nums">{currency.format(summary.totalHeld)}</td>
                 <td className="px-5 py-3 text-right tabular-nums text-green-700">{currency.format(summary.totalReleased)}</td>
                 <td className="px-5 py-3 text-right tabular-nums">{currency.format(summary.totalRemaining)}</td>
+                <td className="px-5 py-3 text-right tabular-nums">
+                  {currency.format(rows.reduce((sum, r) => sum + computeJobDiscrepancy(r).amount, 0))}
+                </td>
                 <td className="px-5 py-3" colSpan={2}></td>
               </tr>
             </tfoot>
