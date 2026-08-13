@@ -242,90 +242,98 @@ export default function G702Page() {
       </div>
 
       {job && (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          <div className="rounded-xl border border-gray-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-gray-500">To Owner</h2>
-            <dl className="mt-3 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Name</dt>
-                <dd className="font-medium text-navy text-right">{job.owner}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Address</dt>
-                <dd className="font-medium text-navy text-right">{job.ownerAddress}</dd>
-              </div>
-            </dl>
+        <div className="flex flex-col gap-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            <div className="rounded-xl border border-gray-200 bg-white p-5">
+              <h2 className="text-sm font-semibold text-gray-500">To Owner</h2>
+              <dl className="mt-3 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">Name</dt>
+                  <dd className="font-medium text-navy text-right">{job.owner}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">Address</dt>
+                  <dd className="font-medium text-navy text-right">{job.ownerAddress}</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-5">
+              <h2 className="text-sm font-semibold text-gray-500">From Contractor</h2>
+              <dl className="mt-3 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">Name</dt>
+                  <dd className="font-medium text-navy text-right">{contractor.company}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">Address</dt>
+                  <dd className="font-medium text-navy text-right">{contractor.companyAddress}</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-5">
+              <h2 className="text-sm font-semibold text-gray-500">Via Architect</h2>
+              <dl className="mt-3 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">Name</dt>
+                  <dd className="font-medium text-navy text-right">{job.architect}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">Address</dt>
+                  <dd className="font-medium text-navy text-right">{job.architectAddress}</dd>
+                </div>
+              </dl>
+            </div>
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-gray-500">From Contractor</h2>
-            <dl className="mt-3 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Name</dt>
-                <dd className="font-medium text-navy text-right">{contractor.company}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Address</dt>
-                <dd className="font-medium text-navy text-right">{contractor.companyAddress}</dd>
-              </div>
-            </dl>
-          </div>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div className="rounded-xl border border-gray-200 bg-white p-5">
+              <h2 className="text-sm font-semibold text-gray-500">Project</h2>
+              <dl className="mt-3 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">Job</dt>
+                  <dd className="font-medium text-navy text-right">
+                    {job.jobNumber}{job.jobName ? ` · ${job.jobName}` : ""} — {job.customer}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">Contract for</dt>
+                  <dd className="font-medium text-navy text-right">{job.contractFor}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">Contract date</dt>
+                  <dd className="font-medium text-navy text-right">{job.contractDate}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">GC project #</dt>
+                  <dd className="font-medium text-navy text-right">{job.architectProjectNumber}</dd>
+                </div>
+              </dl>
+            </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-gray-500">Via Architect</h2>
-            <dl className="mt-3 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Name</dt>
-                <dd className="font-medium text-navy text-right">{job.architect}</dd>
-              </div>
-            </dl>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-gray-500">Project</h2>
-            <dl className="mt-3 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Job</dt>
-                <dd className="font-medium text-navy text-right">
-                  {job.jobNumber}{job.jobName ? ` · ${job.jobName}` : ""} — {job.customer}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Contract for</dt>
-                <dd className="font-medium text-navy text-right">{job.contractFor}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Contract date</dt>
-                <dd className="font-medium text-navy text-right">{job.contractDate}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">GC project #</dt>
-                <dd className="font-medium text-navy text-right">{job.architectProjectNumber}</dd>
-              </div>
-            </dl>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-gray-500">Application</h2>
-            <dl className="mt-3 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Application #</dt>
-                <dd className="font-medium text-navy">{applicationNumber}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Application date</dt>
-                <dd className="font-medium text-navy">{applicationDate}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Period to</dt>
-                <dd className="font-medium text-navy">{periodTo}</dd>
-              </div>
-            </dl>
+            <div className="rounded-xl border border-gray-200 bg-white p-5">
+              <h2 className="text-sm font-semibold text-gray-500">Application</h2>
+              <dl className="mt-3 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">Application #</dt>
+                  <dd className="font-medium text-navy text-right">{applicationNumber}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">Application date</dt>
+                  <dd className="font-medium text-navy text-right">{applicationDate}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">Period to</dt>
+                  <dd className="font-medium text-navy text-right">{periodTo}</dd>
+                </div>
+              </dl>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[2fr_1fr]">
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-sm">
             <tbody>
