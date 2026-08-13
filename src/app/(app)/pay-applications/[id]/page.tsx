@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { fetchPayApplicationById, certifyPayApplication } from "@/lib/payApplicationsDb";
+import {
+  fetchPayApplicationById,
+  certifyPayApplication,
+  uncertifyPayApplication,
+  fetchCertificationHistory,
+  CertificationEvent,
+} from "@/lib/payApplicationsDb";
 import { STATUS_LABEL, STATUS_BADGE_STYLE } from "@/lib/payApplicationStatusUi";
 import { fetchPayAppPayments, fetchDeletedPayAppPayments, recordPayment, deletePayment, restorePayment, permanentlyDeletePayment, PayAppPayment } from "@/lib/payAppPaymentsDb";
 import { fetchJobs, DbJob } from "@/lib/jobs";
@@ -47,6 +53,10 @@ export default function PayApplicationDetailPage() {
   const [confirmPermDelete, setConfirmPermDelete] = useState<string | null>(null);
   const [isCertifying, setIsCertifying] = useState(false);
   const [certifyError, setCertifyError] = useState<string | null>(null);
+  const [showUncertifyConfirm, setShowUncertifyConfirm] = useState(false);
+  const [isUncertifying, setIsUncertifying] = useState(false);
+  const [uncertifyError, setUncertifyError] = useState<string | null>(null);
+  const [certHistory, setCertHistory] = useState<CertificationEvent[]>([]);
 
   // Billing details (computed from SOV)
   const [billedToDate, setBilledToDate] = useState(0);
@@ -126,6 +136,13 @@ export default function PayApplicationDetailPage() {
           setPayments(paymentsData);
           setDeletedPayments(deletedPaymentsData);
         }
+
+        // Certify/uncertify audit trail — best-effort, doesn't block the page
+        fetchCertificationHistory(payAppId)
+          .then((history) => {
+            if (!cancelled) setCertHistory(history);
+          })
+          .catch(() => {});
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Could not load pay application.");
       } finally {
@@ -204,10 +221,33 @@ export default function PayApplicationDetailPage() {
     try {
       const updated = await certifyPayApplication(payApp.id);
       setPayApp(updated);
+      fetchCertificationHistory(payAppId).then(setCertHistory).catch(() => {});
     } catch (err) {
       setCertifyError(err instanceof Error ? err.message : "Could not mark this application certified.");
     } finally {
       setIsCertifying(false);
+    }
+  }
+
+  // Reverts a certified application back to Submitted — for accidental
+  // certifications. Blocked server-side (and pre-checked here) unless
+  // status is exactly "certified" with zero payments recorded, since any
+  // recorded payment would otherwise be left referencing a no-longer-
+  // certified application. Doesn't touch amount/line-item data at all —
+  // only status and certified_date change.
+  async function handleUncertify() {
+    if (!payApp) return;
+    setUncertifyError(null);
+    setIsUncertifying(true);
+    try {
+      const updated = await uncertifyPayApplication(payApp.id);
+      setPayApp(updated);
+      setShowUncertifyConfirm(false);
+      fetchCertificationHistory(payAppId).then(setCertHistory).catch(() => {});
+    } catch (err) {
+      setUncertifyError(err instanceof Error ? err.message : "Could not uncertify this application.");
+    } finally {
+      setIsUncertifying(false);
     }
   }
 
@@ -317,9 +357,25 @@ export default function PayApplicationDetailPage() {
                 {currency.format(totalPaid)} of {currency.format(amountDue)} paid
               </p>
             )}
+            {payApp.status === "certified" && (
+              totalPaid > 0 ? (
+                <p className="max-w-[200px] text-right text-[11px] text-gray-400">
+                  Can&apos;t uncertify — {currency.format(totalPaid)} already recorded in payments. Delete those first.
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowUncertifyConfirm(true)}
+                  className="text-xs font-medium text-gray-400 hover:text-red-500"
+                >
+                  Uncertify
+                </button>
+              )
+            )}
           </div>
         </div>
         {certifyError && <p className="mt-2 text-sm text-red-600">{certifyError}</p>}
+        {uncertifyError && !showUncertifyConfirm && <p className="mt-2 text-sm text-red-600">{uncertifyError}</p>}
 
         {/* Tabs */}
         <div className="mt-4 flex gap-1 border-b border-gray-200">
@@ -364,6 +420,18 @@ export default function PayApplicationDetailPage() {
                 <dd className="mt-1 font-medium text-navy">{formatDate(payApp.periodTo)}</dd>
               </div>
             </dl>
+            {certHistory.length > 0 && (
+              <div className="mt-4 border-t border-gray-100 pt-4">
+                <p className="text-xs font-semibold text-gray-400">Certification history</p>
+                <ul className="mt-2 flex flex-col gap-1">
+                  {certHistory.map((ev) => (
+                    <li key={ev.id} className="text-xs text-gray-500">
+                      {ev.action === "certified" ? "Certified" : "Uncertified"} — {formatDate(ev.occurredAt.slice(0, 10))}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* Billing summary */}
@@ -694,6 +762,64 @@ export default function PayApplicationDetailPage() {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Uncertify confirmation */}
+      {showUncertifyConfirm && payApp && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+          onClick={isUncertifying ? undefined : () => setShowUncertifyConfirm(false)}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between border-b border-gray-100 px-6 py-4">
+              <h2 className="text-lg font-bold text-navy">Uncertify this application?</h2>
+              {!isUncertifying && (
+                <button
+                  type="button"
+                  onClick={() => setShowUncertifyConfirm(false)}
+                  className="text-gray-400 hover:text-gray-600 text-xl leading-none mt-0.5"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-4 p-6">
+              <p className="text-sm text-gray-600">
+                This reverts the application back to Submitted so it can be edited again. The billing data itself —
+                line items, amounts, change orders — is not touched.
+              </p>
+
+              {payApp.pdfUrl && (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 leading-relaxed">
+                  This was already sent to the GC. Uncertifying it here won&apos;t recall that copy — you may need to
+                  notify them separately.
+                </p>
+              )}
+
+              {uncertifyError && <p className="text-sm text-red-600">{uncertifyError}</p>}
+
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowUncertifyConfirm(false)}
+                  disabled={isUncertifying}
+                  className="flex-1 rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-semibold text-navy hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUncertify}
+                  disabled={isUncertifying}
+                  className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {isUncertifying ? "Uncertifying…" : "Yes, uncertify"}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

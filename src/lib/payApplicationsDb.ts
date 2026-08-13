@@ -272,6 +272,44 @@ export async function certifyPayApplication(payAppId: string): Promise<PayApplic
   return rowToPayApplication(data);
 }
 
+// Reverts a certified application back to "submitted" via the
+// uncertify_pay_application() Postgres function — rejects server-side
+// unless status is exactly 'certified' (not 'paid') and no payments are
+// recorded against it yet. Does not touch amount_billed, current_payment_due,
+// line items, or anything else about the billing data itself.
+export async function uncertifyPayApplication(payAppId: string): Promise<PayApplication> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("uncertify_pay_application", {
+    p_pay_app_id: payAppId,
+  });
+  if (error) throw new Error(error.message);
+  return rowToPayApplication(data);
+}
+
+export type CertificationEvent = {
+  id: string;
+  action: "certified" | "uncertified";
+  occurredAt: string;
+};
+
+// Full certify/uncertify history for a pay application, most recent first —
+// a pay app can be certified, uncertified, and re-certified multiple times,
+// and this preserves every event rather than just the latest.
+export async function fetchCertificationHistory(payAppId: string): Promise<CertificationEvent[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("pay_application_certifications")
+    .select("id, action, occurred_at")
+    .eq("pay_app_id", payAppId)
+    .order("occurred_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    action: row.action,
+    occurredAt: row.occurred_at,
+  }));
+}
+
 export async function savePayApplicationPdf(
   jobId: string,
   applicationNumber: string,
