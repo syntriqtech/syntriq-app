@@ -40,6 +40,13 @@ export default function YellowcardImportModal({ onFile, onClose, isImporting }: 
             <p className="mt-0.5 text-sm text-gray-500">
               Upload the job&apos;s billing workbook to pre-fill this form.
             </p>
+            <a
+              href="/templates/syntriq-job-import-template.xlsx"
+              download
+              className="mt-1 inline-block text-sm font-semibold text-teal hover:underline"
+            >
+              Don&apos;t have one? Download the blank template
+            </a>
           </div>
           <button
             type="button"

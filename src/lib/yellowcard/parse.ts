@@ -1,31 +1,21 @@
 import * as XLSX from "xlsx";
-import { cleanString, cleanPhone, cleanDate, cleanNumber, cleanPercent } from "./clean";
+import { cleanString, cleanDate, cleanNumber, cleanPercent } from "./clean";
 import type { JobSetup } from "@/lib/jobSetupData";
 
-export type YellowcardExtras = {
-  gcPhone: string;
-  gcPmName: string;
-  gcPmEmail: string;
-  ctiPmName: string;
-  ctiEmail: string;
-  ctiPhone: string;
-  estimator: string;
-  county: string;
-  ohAndPPercent: number;
-  changeOrderRatePercent: number;
-  ownerContact: string;
-  ownerPhone: string;
-  poNumber: string;
-  projectMgrName: string;
+export type ImportedSovLine = {
+  item: string;
+  description: string;
+  scheduledValue: number;
 };
 
 export type ParseResult = {
-  draftJob: Omit<JobSetup, "contractValue" | "jobName"> & { jobName: string };
+  draftJob: JobSetup;
+  sovLineItems: ImportedSovLine[];
   warnings: string[];
-  originalContract: number;
-  tileScopeValue: number;
-  extras: YellowcardExtras;
 };
+
+const SOV_FIRST_DATA_ROW = 5;
+const SOV_LAST_DATA_ROW = 54;
 
 type Cell = XLSX.CellObject;
 
@@ -55,9 +45,8 @@ function date(sheet: XLSX.WorkSheet, addr: string): string {
   return c ? cleanDate(c.v) : "";
 }
 
-function phone(sheet: XLSX.WorkSheet, addr: string): string {
-  const c = get(sheet, addr);
-  return c ? cleanPhone({ v: c.v, w: c.w }) : "";
+function bool(sheet: XLSX.WorkSheet, addr: string): boolean {
+  return str(sheet, addr).trim().toLowerCase() === "yes";
 }
 
 export function parseYellowcard(buffer: Buffer): ParseResult {
@@ -68,116 +57,107 @@ export function parseYellowcard(buffer: Buffer): ParseResult {
     wb = XLSX.read(buffer, { type: "buffer" });
   } catch {
     throw new Error(
-      "Could not read this file. Common causes: (1) the file is not .xlsx format — older .xls files must be resaved as .xlsx first; (2) the workbook is password-protected — remove the password before uploading; (3) the file is corrupted or not a Yellowcard at all."
+      "Could not read this file. Common causes: (1) the file is not .xlsx format — older .xls files must be resaved as .xlsx first; (2) the workbook is password-protected — remove the password before uploading; (3) the file is corrupted or not a Syntriq Job Import template."
     );
   }
 
-  const ji = wb.Sheets["JOB INFO"];
-  const yc = wb.Sheets["YELLOW CARD"];
-
-  if (!ji) warnings.push('Sheet "JOB INFO" not found — GC and job fields will be blank.');
-  if (!yc) warnings.push('Sheet "YELLOW CARD" not found — owner, retention, and date fields will be blank.');
-
-  // ── JOB INFO sheet ─────────────────────────────────────────────────────────
-  const gcName        = ji ? str(ji, "E6") : "";
-  const gcProject     = ji ? str(ji, "E7") : "";
-  const gcStreet      = ji ? str(ji, "E8") : "";
-  const gcCity        = ji ? str(ji, "E9") : "";
-  const gcPhone       = ji ? phone(ji, "E10") : "";
-  const gcPmName      = ji ? str(ji, "E12") : "";
-  const gcPmEmail     = ji ? str(ji, "E13") : "";
-  const jobName       = ji ? str(ji, "M6") : "";
-  const poNumber      = ji ? str(ji, "M7") : "";
-  const jobStreet     = ji ? str(ji, "M8") : "";
-  const jobCity       = ji ? str(ji, "M9") : "";
-  const originalContract = ji ? num(ji, "M10") : 0;
-  const ohAndPPercent = ji ? pct(ji, "M11") : 0;
-  const ctiPmName     = ji ? str(ji, "M12") : "";
-  const ctiEmail      = ji ? str(ji, "M13") : "";
-  const ctiPhone      = ji ? phone(ji, "M14") : "";
-
-  // ── YELLOW CARD sheet ──────────────────────────────────────────────────────
-  const retention          = yc ? num(yc, "F1") : 0;
-  const awardDate          = yc ? date(yc, "K13") : "";
-  const ownerName          = yc ? str(yc, "C16") : "";
-  const ownerStreet        = yc ? str(yc, "C17") : "";
-  const ownerCityStateZip  = yc ? str(yc, "C18") : "";
-  const ownerPhone         = yc ? phone(yc, "C19") : "";
-  const ownerContact       = yc ? str(yc, "C20") : "";
-  const estimator          = yc ? str(yc, "L23") : "";
-  const projectMgr         = yc ? str(yc, "L24") : "";
-  const county             = yc ? str(yc, "L25") : "";
-  const tileScopeValue     = yc ? num(yc, "C35") : 0;
-  const changeOrderRatePercent = yc ? pct(yc, "C39") : 0;
-
-  // ── Cross-check redundant fields ───────────────────────────────────────────
-  if (ctiPmName && projectMgr && ctiPmName !== projectMgr) {
-    warnings.push(
-      `CTI PM name differs between sheets ("${ctiPmName}" on JOB INFO, "${projectMgr}" on YELLOW CARD) — using JOB INFO value.`
-    );
+  const sheet = wb.Sheets["JOB INFO"];
+  if (!sheet) {
+    throw new Error('Sheet "JOB INFO" not found — is this the Syntriq Job Import template?');
   }
 
-  // ── Build combined addresses ───────────────────────────────────────────────
-  const customerAddress = [gcStreet, gcCity].filter(Boolean).join(", ");
-  const jobAddress      = [jobStreet, jobCity].filter(Boolean).join(", ");
-  const ownerAddress    = [ownerStreet, ownerCityStateZip].filter(Boolean).join(", ");
+  // ── Project & site ───────────────────────────────────────────────────────
+  const jobName                = str(sheet, "E6");
+  const jobNumber               = str(sheet, "E7");
+  const architectProjectNumber = str(sheet, "E8");
+  const jobAddress              = str(sheet, "E9");
 
-  // ── Flag gaps ─────────────────────────────────────────────────────────────
-  if (!gcName)           warnings.push("GC / customer name not found — enter it manually.");
-  if (!jobAddress)       warnings.push("Job address not found — enter it manually.");
-  if (!awardDate)        warnings.push("Award / contract date not found — enter it manually.");
-  if (!ownerName)        warnings.push("Owner not found — enter it manually.");
-  if (retention === 0)   warnings.push("Retention % not found — enter it manually.");
-  if (originalContract === 0) warnings.push("Original contract value (M10) not found.");
-  if (tileScopeValue === 0)   warnings.push("Tile scope value (C35) not found.");
-  if (!poNumber)         warnings.push("PO number not found — Job # has been left blank.");
+  // ── General contractor ───────────────────────────────────────────────────
+  const customer        = str(sheet, "E12");
+  const customerAddress = str(sheet, "E13");
 
-  const draftJob: Omit<JobSetup, "contractValue"> = {
-    // M6 on the yellowcard is literally labeled "Job Name" — map it directly
-    jobName:                jobName,
-    // PO number is the best candidate for the internal job number
-    jobNumber:              poNumber,
-    customer:               gcName,
+  // ── Owner & architect ────────────────────────────────────────────────────
+  const owner        = str(sheet, "E16");
+  const ownerAddress = str(sheet, "E17");
+  const architect    = str(sheet, "E18");
+
+  // ── Contract ──────────────────────────────────────────────────────────────
+  const contractFor   = str(sheet, "M6");
+  const contractValue = num(sheet, "M7");
+  const contractDate  = date(sheet, "M8");
+  const startDate     = date(sheet, "M9");
+
+  // ── Retention ─────────────────────────────────────────────────────────────
+  const retentionRateCW = pct(sheet, "M12");
+  const retentionRateSM = pct(sheet, "M13");
+
+  // ── Billing & team ────────────────────────────────────────────────────────
+  const ctiPm             = str(sheet, "M16");
+  const certifiedPayroll  = bool(sheet, "M17");
+  const paymentTerms      = str(sheet, "M18");
+  const billingDueDay     = num(sheet, "M19");
+  const billingCheckinMonth = str(sheet, "M20");
+  const billingPlatform   = str(sheet, "M21");
+
+  // ── Flag gaps in required fields ─────────────────────────────────────────
+  if (!jobName)          warnings.push("Job Name not found — enter it manually.");
+  if (!jobNumber)        warnings.push("Job # not found — enter it manually.");
+  if (!jobAddress)       warnings.push("Job / site address not found — enter it manually.");
+  if (!customer)         warnings.push("Customer (GC) name not found — enter it manually.");
+  if (!customerAddress)  warnings.push("Customer billing address not found — enter it manually.");
+  if (!contractFor)      warnings.push("Contract for (scope of work) not found — enter it manually.");
+  if (contractValue === 0) warnings.push("Contract value not found — enter it manually.");
+  if (!contractDate)     warnings.push("Contract date not found — enter it manually.");
+  if (retentionRateCW === 0) warnings.push("Retention — completed work (%) not found — enter it manually.");
+  if (retentionRateSM === 0) warnings.push("Retention — stored materials (%) not found — enter it manually.");
+  if (!ctiPm)             warnings.push("Project manager not found — enter it manually.");
+  if (billingDueDay === 0) warnings.push("Billing due day not found — enter it manually.");
+  if (!billingPlatform)  warnings.push("Billing platform not found — enter it manually.");
+
+  // ── Schedule of values ───────────────────────────────────────────────────
+  const sovSheet = wb.Sheets["SCHEDULE OF VALUES"];
+  const sovLineItems: ImportedSovLine[] = [];
+  if (sovSheet) {
+    for (let row = SOV_FIRST_DATA_ROW; row <= SOV_LAST_DATA_ROW; row++) {
+      const item = str(sovSheet, `B${row}`);
+      const description = str(sovSheet, `C${row}`);
+      const scheduledValue = num(sovSheet, `D${row}`);
+      if (!description && scheduledValue === 0) continue; // skip blank rows
+      sovLineItems.push({
+        item: item || String(sovLineItems.length + 1),
+        description,
+        scheduledValue,
+      });
+    }
+  }
+
+  const draftJob: JobSetup = {
+    jobName,
+    jobNumber,
+    customer,
     customerAddress,
-    gcId:                   null,
-    paymentTerms:           "",
-    owner:                  ownerName,
+    gcId: null,
+    paymentTerms,
+    owner,
     ownerAddress,
     jobAddress,
-    architect:              "",
-    architectAddress:       "",
-    // GC's own project number goes here; architect is often unspecified
-    architectProjectNumber: gcProject,
-    contractFor:            "",
-    contractDate:           awardDate,
-    startDate:              "",
-    retentionRateCW:        retention,
-    retentionRateSM:        retention,
-    ctiPm:                  projectMgr || ctiPmName,
+    architect,
+    architectAddress: "",
+    architectProjectNumber,
+    contractFor,
+    contractValue,
+    contractDate,
+    startDate,
+    retentionRateCW,
+    retentionRateSM,
+    ctiPm,
     retentionStepdownThreshold: null,
     retentionStepdownRateCW: null,
-    billingDueDay: 15,
-    billingCheckinMonth: new Date().toISOString().slice(0, 7),
-    billingPlatform: "",
-    certifiedPayroll: false,
+    billingDueDay,
+    billingCheckinMonth,
+    billingPlatform,
+    certifiedPayroll,
   };
 
-  const extras: YellowcardExtras = {
-    gcPhone,
-    gcPmName,
-    gcPmEmail,
-    ctiPmName: projectMgr || ctiPmName,
-    ctiEmail,
-    ctiPhone,
-    estimator,
-    county,
-    ohAndPPercent,
-    changeOrderRatePercent,
-    ownerContact,
-    ownerPhone,
-    poNumber,
-    projectMgrName: projectMgr,
-  };
-
-  return { draftJob, warnings, originalContract, tileScopeValue, extras };
+  return { draftJob, sovLineItems, warnings };
 }

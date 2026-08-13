@@ -8,6 +8,14 @@ import { createJob } from "@/lib/jobs";
 import { useJobs } from "@/hooks/useJobs";
 import { fetchBillingPlatforms, addBillingPlatform } from "@/lib/billingPlatformsDb";
 import type { ParseResult } from "@/lib/yellowcard/parse";
+import { SOVLineItem } from "@/lib/sovData";
+import { saveSovItems } from "@/lib/sovLineItemsDb";
+
+const SESSION_KEY = "yellowcard_draft";
+
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -16,7 +24,11 @@ const currency = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
-const SESSION_KEY = "yellowcard_draft";
+function formatContractInput(raw: string): string {
+  const n = Number(raw.replace(/,/g, ""));
+  if (isNaN(n) || raw.trim() === "") return raw;
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 type FormState = {
   jobName: string;
@@ -30,6 +42,7 @@ type FormState = {
   architectAddress: string;
   architectProjectNumber: string;
   contractFor: string;
+  contractValue: string;
   contractDate: string;
   startDate: string;
   retentionRateCW: string;
@@ -38,6 +51,7 @@ type FormState = {
   retentionStepdownThreshold: string;
   retentionStepdownRateCW: string;
   certifiedPayroll: string;
+  paymentTerms: string;
   billingDueDay: string;
   billingCheckinMonth: string;
   billingPlatform: string;
@@ -48,7 +62,7 @@ export default function ImportReviewPage() {
   const { jobs, setJobs } = useJobs();
   const [parsed, setParsed] = useState<ParseResult | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
-  const [contractChoice, setContractChoice] = useState<"original" | "tileScope" | null>(null);
+  const [lineItems, setLineItems] = useState<SOVLineItem[]>([]);
   const [billingPlatforms, setBillingPlatforms] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -63,30 +77,43 @@ export default function ImportReviewPage() {
       if (!raw) return;
       const data: ParseResult = JSON.parse(raw);
       setParsed(data);
+      const job = data.draftJob;
       setForm({
-        jobName:                data.draftJob.jobName,
-        jobNumber:              data.draftJob.jobNumber,
-        customer:               data.draftJob.customer,
-        customerAddress:        data.draftJob.customerAddress,
-        owner:                  data.draftJob.owner,
-        ownerAddress:           data.draftJob.ownerAddress,
-        jobAddress:             data.draftJob.jobAddress,
-        architect:              data.draftJob.architect,
-        architectAddress:       data.draftJob.architectAddress,
-        architectProjectNumber: data.draftJob.architectProjectNumber,
-        contractFor:            data.draftJob.contractFor,
-        contractDate:           data.draftJob.contractDate,
-        startDate:              data.draftJob.startDate,
-        retentionRateCW:        String(data.draftJob.retentionRateCW),
-        retentionRateSM:        String(data.draftJob.retentionRateSM),
-        ctiPm:                  "",
+        jobName:                job.jobName,
+        jobNumber:              job.jobNumber,
+        customer:               job.customer,
+        customerAddress:        job.customerAddress,
+        owner:                  job.owner,
+        ownerAddress:           job.ownerAddress,
+        jobAddress:             job.jobAddress,
+        architect:              job.architect,
+        architectAddress:       job.architectAddress,
+        architectProjectNumber: job.architectProjectNumber,
+        contractFor:            job.contractFor,
+        contractValue:          formatContractInput(String(job.contractValue)),
+        contractDate:           job.contractDate,
+        startDate:              job.startDate,
+        retentionRateCW:        String(job.retentionRateCW),
+        retentionRateSM:        String(job.retentionRateSM),
+        ctiPm:                  job.ctiPm,
         retentionStepdownThreshold: "",
         retentionStepdownRateCW:    "",
-        certifiedPayroll:           "no",
-        billingDueDay:              "15",
-        billingCheckinMonth:        new Date().toISOString().slice(0, 7),
-        billingPlatform:            "",
+        certifiedPayroll:           job.certifiedPayroll ? "yes" : "no",
+        paymentTerms:               job.paymentTerms,
+        billingDueDay:              String(job.billingDueDay || 15),
+        billingCheckinMonth:        job.billingCheckinMonth || new Date().toISOString().slice(0, 7),
+        billingPlatform:            job.billingPlatform,
       });
+      setLineItems(
+        data.sovLineItems.map((line) => ({
+          item: line.item,
+          description: line.description,
+          scheduledValue: line.scheduledValue,
+          previousApplications: 0,
+          thisPeriod: 0,
+          storedMaterials: 0,
+        }))
+      );
     } catch {
       // Corrupted sessionStorage — user will see the "no data" state
     }
@@ -96,13 +123,45 @@ export default function ImportReviewPage() {
     setForm((prev) => (prev ? { ...prev, [field]: value } : prev));
   }
 
+  function updateLineItem(index: number, field: "description" | "scheduledValue", value: string) {
+    setLineItems((prev) => {
+      const updated = [...prev];
+      const item = updated[index];
+      updated[index] =
+        field === "scheduledValue"
+          ? { ...item, scheduledValue: Number(value) || 0 }
+          : { ...item, description: value };
+      return updated;
+    });
+  }
+
+  function removeLineItem(index: number) {
+    setLineItems((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function addLineItem() {
+    setLineItems((prev) => [
+      ...prev,
+      { item: String(prev.length + 1), description: "", scheduledValue: 0, previousApplications: 0, thisPeriod: 0, storedMaterials: 0 },
+    ]);
+  }
+
   async function handleConfirm() {
-    if (!form || !parsed || !contractChoice) return;
+    if (!form) return;
     setSaveError(null);
 
     const duplicate = jobs.find((j) => j.jobNumber === form.jobNumber);
     if (duplicate) {
       setSaveError(`Job # "${form.jobNumber}" is already in use by "${duplicate.customer}". Change the Job # above before confirming.`);
+      return;
+    }
+
+    const contractVal = Number(form.contractValue.replace(/,/g, "")) || 0;
+    const scheduledTotal = lineItems.reduce((sum, line) => sum + line.scheduledValue, 0);
+    if (contractVal > 0 && scheduledTotal > contractVal + 0.01) {
+      setSaveError(
+        `Schedule of values totals ${currency.format(scheduledTotal)}, which is more than the contract value of ${currency.format(contractVal)}. Adjust the line items below before confirming.`
+      );
       return;
     }
 
@@ -117,7 +176,7 @@ export default function ImportReviewPage() {
         customer:               form.customer,
         customerAddress:        form.customerAddress,
         gcId:                   null,
-        paymentTerms:           "",
+        paymentTerms:           form.paymentTerms,
         owner:                  form.owner,
         ownerAddress:           form.ownerAddress,
         jobAddress:             form.jobAddress,
@@ -125,7 +184,7 @@ export default function ImportReviewPage() {
         architectAddress:       form.architectAddress,
         architectProjectNumber: form.architectProjectNumber,
         contractFor:            form.contractFor,
-        contractValue:          contractChoice === "original" ? parsed.originalContract : parsed.tileScopeValue,
+        contractValue:          Number(form.contractValue.replace(/,/g, "")) || 0,
         contractDate:           form.contractDate,
         startDate:              form.startDate,
         retentionRateCW:        Number(form.retentionRateCW) || 0,
@@ -139,6 +198,21 @@ export default function ImportReviewPage() {
         billingPlatform:            form.billingPlatform.trim(),
       });
       setJobs((prev) => [saved, ...prev]);
+
+      // Pre-fill Application #1's schedule of values from the imported line
+      // items, if any were found. Nothing has been billed yet (This Period is
+      // 0 on every row) — this just seeds the Scheduled Value column so the
+      // user doesn't have to retype what they already typed into the template.
+      if (lineItems.length > 0) {
+        try {
+          const today = todayIsoDate();
+          await saveSovItems(saved.id, "1", today, today, lineItems, []);
+        } catch {
+          // Non-fatal — job is created, SOV pre-fill is best-effort; the user
+          // can still build the schedule of values manually from /sov.
+        }
+      }
+
       sessionStorage.removeItem(SESSION_KEY);
       sessionStorage.setItem("sov_initial_job", saved.jobNumber);
       router.push("/sov");
@@ -155,7 +229,7 @@ export default function ImportReviewPage() {
       <div className="flex flex-col gap-4">
         <h1 className="text-2xl font-bold text-navy">Import Review</h1>
         <p className="text-sm text-gray-500">
-          No Yellowcard data to review. Upload a file from the{" "}
+          No import data to review. Upload a file from the{" "}
           <button
             type="button"
             onClick={() => router.push("/job-setup")}
@@ -169,19 +243,26 @@ export default function ImportReviewPage() {
     );
   }
 
-  const { warnings, originalContract, tileScopeValue, extras } = parsed;
+  const { warnings } = parsed;
   const missingRequiredLabels: string[] = [];
+  if (!form.jobName.trim()) missingRequiredLabels.push("Job Name");
+  if (!form.jobNumber.trim()) missingRequiredLabels.push("Job #");
+  if (!form.customer.trim()) missingRequiredLabels.push("Customer (GC)");
   if (!form.customerAddress.trim()) missingRequiredLabels.push("Customer billing address");
   if (!form.jobAddress.trim()) missingRequiredLabels.push("Job / site address");
   if (!form.contractFor.trim()) missingRequiredLabels.push("Contract for (scope of work)");
-  if (!form.contractDate.trim()) missingRequiredLabels.push("Contract / award date");
+  if (!form.contractValue.trim()) missingRequiredLabels.push("Contract value");
+  if (!form.contractDate.trim()) missingRequiredLabels.push("Contract date");
   if (form.retentionRateCW.trim() === "") missingRequiredLabels.push("Retention — completed work (%)");
   if (form.retentionRateSM.trim() === "") missingRequiredLabels.push("Retention — stored materials (%)");
   if (!form.ctiPm.trim()) missingRequiredLabels.push("Project manager");
   if (!form.billingDueDay.trim()) missingRequiredLabels.push("Billing due day");
   if (!form.billingPlatform.trim()) missingRequiredLabels.push("Billing platform");
-  const canConfirm =
-    contractChoice !== null && form.jobNumber.trim().length > 0 && missingRequiredLabels.length === 0;
+  const canConfirm = missingRequiredLabels.length === 0;
+
+  const scheduledTotal = lineItems.reduce((sum, line) => sum + line.scheduledValue, 0);
+  const contractVal = Number(form.contractValue.replace(/,/g, "")) || 0;
+  const overContract = contractVal > 0 && scheduledTotal > contractVal + 0.01;
 
   return (
     <div className="flex flex-col gap-8">
@@ -189,7 +270,7 @@ export default function ImportReviewPage() {
       <div>
         <h1 className="text-2xl font-bold text-navy">Review imported job</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Fields pre-filled from the Yellowcard. Every field is editable — check them, then confirm to create the job.
+          Fields pre-filled from your import file. Every field is editable — check them, then confirm to create the job.
         </p>
       </div>
 
@@ -207,54 +288,6 @@ export default function ImportReviewPage() {
         </div>
       )}
 
-      {/* Contract value — REQUIRED choice */}
-      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-bold text-navy">
-          Contract value — choose one <span className="text-red-500">*</span>
-        </h2>
-        <p className="mt-1 text-sm text-gray-500">
-          The Yellowcard has two different dollar amounts. You must pick which one is the correct contract value for billing.
-        </p>
-        <div className="mt-4 flex flex-col gap-3">
-          <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${contractChoice === "original" ? "border-teal bg-teal/5" : "border-gray-200 hover:border-gray-300"}`}>
-            <input
-              type="radio"
-              name="contractValue"
-              value="original"
-              checked={contractChoice === "original"}
-              onChange={() => setContractChoice("original")}
-              className="mt-0.5 h-4 w-4 accent-teal"
-            />
-            <div>
-              <p className="text-sm font-semibold text-navy">
-                {currency.format(originalContract)} — Original Contract
-              </p>
-              <p className="mt-0.5 text-xs text-gray-500">
-                From JOB INFO cell M10. This is the full subcontract value including all scopes.
-              </p>
-            </div>
-          </label>
-          <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${contractChoice === "tileScope" ? "border-teal bg-teal/5" : "border-gray-200 hover:border-gray-300"}`}>
-            <input
-              type="radio"
-              name="contractValue"
-              value="tileScope"
-              checked={contractChoice === "tileScope"}
-              onChange={() => setContractChoice("tileScope")}
-              className="mt-0.5 h-4 w-4 accent-teal"
-            />
-            <div>
-              <p className="text-sm font-semibold text-navy">
-                {currency.format(tileScopeValue)} — Tile Scope Value
-              </p>
-              <p className="mt-0.5 text-xs text-gray-500">
-                From YELLOW CARD cell C35. This is the tile-only scope, excluding other trades.
-              </p>
-            </div>
-          </label>
-        </div>
-      </div>
-
       {/* Job fields */}
       <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-base font-bold text-navy">Job details</h2>
@@ -270,14 +303,20 @@ export default function ImportReviewPage() {
             />
           </div>
           <TextField
-            label="Job # (your internal number) *"
+            label="Job # *"
             id="jobNumber"
             required
             value={form.jobNumber}
             onChange={(e) => handleChange("jobNumber", e.target.value)}
           />
           <TextField
-            label="Customer (GC name) *"
+            label="GC project #"
+            id="architectProjectNumber"
+            value={form.architectProjectNumber}
+            onChange={(e) => handleChange("architectProjectNumber", e.target.value)}
+          />
+          <TextField
+            label="Customer (GC) *"
             id="customer"
             required
             value={form.customer}
@@ -298,6 +337,12 @@ export default function ImportReviewPage() {
             onChange={(e) => handleChange("jobAddress", e.target.value)}
           />
           <TextField
+            label="Architect"
+            id="architect"
+            value={form.architect}
+            onChange={(e) => handleChange("architect", e.target.value)}
+          />
+          <TextField
             label="Owner"
             id="owner"
             value={form.owner}
@@ -310,18 +355,6 @@ export default function ImportReviewPage() {
             onChange={(e) => handleChange("ownerAddress", e.target.value)}
           />
           <TextField
-            label="Architect (not in file — fill in if needed)"
-            id="architect"
-            value={form.architect}
-            onChange={(e) => handleChange("architect", e.target.value)}
-          />
-          <TextField
-            label="GC project #"
-            id="architectProjectNumber"
-            value={form.architectProjectNumber}
-            onChange={(e) => handleChange("architectProjectNumber", e.target.value)}
-          />
-          <TextField
             label="Contract for (scope of work) *"
             id="contractFor"
             required
@@ -329,14 +362,31 @@ export default function ImportReviewPage() {
             onChange={(e) => handleChange("contractFor", e.target.value)}
           />
           <TextField
-            label="Contract / award date *"
+            label="Contract value *"
+            id="contractValue"
+            prefix="$"
+            inputMode="decimal"
+            required
+            value={form.contractValue}
+            onChange={(e) => handleChange("contractValue", e.target.value)}
+            onFocus={(e) => handleChange("contractValue", e.target.value.replace(/,/g, ""))}
+            onBlur={(e) => handleChange("contractValue", formatContractInput(e.target.value))}
+          />
+          <TextField
+            label="Contract date *"
             id="contractDate"
             type="date"
             required
             value={form.contractDate}
             onChange={(e) => handleChange("contractDate", e.target.value)}
           />
-          <div />
+          <TextField
+            label="Start date"
+            id="startDate"
+            type="date"
+            value={form.startDate}
+            onChange={(e) => handleChange("startDate", e.target.value)}
+          />
           <TextField
             label="Retention — completed work (%) *"
             id="retentionRateCW"
@@ -358,13 +408,6 @@ export default function ImportReviewPage() {
             required
             value={form.retentionRateSM}
             onChange={(e) => handleChange("retentionRateSM", e.target.value)}
-          />
-          <TextField
-            label="Start date (not in file)"
-            id="startDate"
-            type="date"
-            value={form.startDate}
-            onChange={(e) => handleChange("startDate", e.target.value)}
           />
           <TextField
             label="Step-down threshold — % complete (not in file, optional)"
@@ -389,7 +432,7 @@ export default function ImportReviewPage() {
             onChange={(e) => handleChange("retentionStepdownRateCW", e.target.value)}
           />
           <TextField
-            label="Project manager (not in file) *"
+            label="Project manager *"
             id="ctiPm"
             required
             value={form.ctiPm}
@@ -397,7 +440,7 @@ export default function ImportReviewPage() {
           />
           <div className="flex flex-col gap-1.5">
             <label htmlFor="certifiedPayroll" className="text-sm font-medium text-navy">
-              Certified payroll job? (not in file)
+              Certified payroll job?
             </label>
             <select
               id="certifiedPayroll"
@@ -410,7 +453,14 @@ export default function ImportReviewPage() {
             </select>
           </div>
           <TextField
-            label="Billing due day (not in file) *"
+            label="Payment terms"
+            id="paymentTerms"
+            value={form.paymentTerms}
+            onChange={(e) => handleChange("paymentTerms", e.target.value)}
+            placeholder="e.g. Net 30, 20th of month via GCPay"
+          />
+          <TextField
+            label="Billing due day (day of month) *"
             id="billingDueDay"
             type="number"
             min="1"
@@ -422,7 +472,7 @@ export default function ImportReviewPage() {
             onChange={(e) => handleChange("billingDueDay", e.target.value)}
           />
           <TextField
-            label="Next billing check-in month (not in file)"
+            label="Next billing check-in month"
             id="billingCheckinMonth"
             type="month"
             value={form.billingCheckinMonth}
@@ -430,7 +480,7 @@ export default function ImportReviewPage() {
           />
           <div>
             <TextField
-              label="Billing platform (not in file) *"
+              label="Billing platform *"
               id="billingPlatform"
               required
               value={form.billingPlatform}
@@ -447,56 +497,91 @@ export default function ImportReviewPage() {
         </div>
       </div>
 
-      {/* Extra info from the file — read-only reference */}
+      {/* Schedule of values */}
       <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-        <h2 className="mb-1 text-base font-bold text-navy">Additional info from Yellowcard</h2>
-        <p className="mb-4 text-sm text-gray-500">
-          These fields were extracted but don't have a place in the job record — keep them handy for reference.
+        <h2 className="text-base font-bold text-navy">Schedule of values</h2>
+        <p className="mt-1 text-sm text-gray-500">
+          {lineItems.length > 0
+            ? "Line items found on the SCHEDULE OF VALUES tab — this becomes Application #1's starting schedule of values. Review and edit before confirming."
+            : "No line items were found on the SCHEDULE OF VALUES tab. You can build the schedule of values manually after creating the job, from Create Pay App."}
         </p>
-        <dl className="grid grid-cols-1 gap-x-8 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
-          {[
-            ["PO number",           extras.poNumber],
-            ["GC PM",               extras.gcPmName],
-            ["GC PM email",         extras.gcPmEmail],
-            ["GC phone",            extras.gcPhone],
-            ["Project manager", extras.ctiPmName],
-            ["CTI email",           extras.ctiEmail],
-            ["CTI phone",           extras.ctiPhone],
-            ["Estimator",           extras.estimator],
-            ["County",              extras.county],
-            ["Owner contact",       extras.ownerContact],
-            ["Owner phone",         extras.ownerPhone],
-            ["OH&P %",              extras.ohAndPPercent ? `${extras.ohAndPPercent}%` : ""],
-            ["Change order rate",   extras.changeOrderRatePercent ? `${extras.changeOrderRatePercent}%` : ""],
-          ]
-            .filter(([, v]) => v)
-            .map(([label, value]) => (
-              <div key={label} className="flex flex-col gap-0.5">
-                <dt className="text-xs text-gray-400">{label}</dt>
-                <dd className="font-medium text-navy">{value}</dd>
-              </div>
-            ))}
-        </dl>
-      </div>
 
-      {/* SOV notice */}
-      <div className="rounded-xl border border-teal/30 bg-teal/5 p-4">
-        <p className="text-sm font-semibold text-teal">Schedule of Values not included</p>
-        <p className="mt-1 text-sm text-gray-600">
-          The Yellowcard doesn't contain a billable Schedule of Values — that's entered separately. After you create
-          this job, you'll be taken to the SOV page to enter your line items.
-        </p>
+        {lineItems.length > 0 && (
+          <div className="mt-4 overflow-x-auto rounded-xl border border-gray-100">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 text-gray-500">
+                  <th className="px-3 py-2.5 font-medium">Item</th>
+                  <th className="px-3 py-2.5 font-medium">Description</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Scheduled value</th>
+                  <th className="px-3 py-2.5"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {lineItems.map((line, index) => (
+                  <tr key={index}>
+                    <td className="px-3 py-2 font-semibold text-navy">{line.item}</td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="text"
+                        value={line.description}
+                        onChange={(e) => updateLineItem(index, "description", e.target.value)}
+                        className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm text-navy focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={line.scheduledValue}
+                        onChange={(e) => updateLineItem(index, "scheduledValue", e.target.value)}
+                        onWheel={(e) => e.currentTarget.blur()}
+                        className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-right text-sm text-navy focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => removeLineItem(index)}
+                        className="text-xs font-medium text-red-400 hover:text-red-600"
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className={`border-t border-gray-200 font-bold ${overContract ? "bg-red-50 text-red-600" : "bg-gray-50 text-navy"}`}>
+                  <td className="px-3 py-3" colSpan={2}>Total</td>
+                  <td className="px-3 py-3 text-right">{currency.format(scheduledTotal)}</td>
+                  <td className="px-3 py-3" />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+
+        {overContract && (
+          <p className="mt-3 text-sm font-medium text-red-600">
+            This total can&apos;t exceed the contract value of {currency.format(contractVal)}. It&apos;s currently{" "}
+            {currency.format(scheduledTotal - contractVal)} over — adjust the line items above.
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={addLineItem}
+          className="mt-3 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-navy hover:bg-gray-50"
+        >
+          + Add line item
+        </button>
       </div>
 
       {/* Actions */}
       {saveError && <p className="text-sm text-red-600">{saveError}</p>}
-      {!canConfirm && !contractChoice && (
-        <p className="text-sm text-red-500">Choose a contract value above before confirming.</p>
-      )}
-      {!canConfirm && contractChoice && !form.jobNumber.trim() && (
-        <p className="text-sm text-red-500">Enter a Job # before confirming.</p>
-      )}
-      {!canConfirm && contractChoice && form.jobNumber.trim() && missingRequiredLabels.length > 0 && (
+      {!canConfirm && (
         <p className="text-sm text-red-500">
           Fill in required fields before confirming: {missingRequiredLabels.join(", ")}.
         </p>
