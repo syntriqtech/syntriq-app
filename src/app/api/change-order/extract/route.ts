@@ -1,12 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { extractJsonFromPdf, validatePdfUpload, getAnthropicApiKey } from "@/lib/aiPdfExtraction";
+import {
+  extractJsonFromPdf,
+  validatePdfUpload,
+  getAnthropicApiKey,
+  EXTRACTABLE_MEDIA_TYPES,
+  type ExtractableMediaType,
+} from "@/lib/aiPdfExtraction";
 
 // Reuses the same "co-documents" bucket that approval docs already upload to
 // (see uploadCoDocument in changeOrdersDb.ts) — imported CORs are stored
 // under a per-user "import" prefix until the resulting CO is created, then
 // the same URL is attached as that CO's approval doc.
 const BUCKET = "co-documents";
+
+const FILE_EXTENSIONS: Record<ExtractableMediaType, string> = {
+  "application/pdf": "pdf",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+};
 
 // Works on any reasonably COR-shaped PDF — Clearstory export or otherwise —
 // not hardcoded to one platform's layout.
@@ -95,29 +107,30 @@ export async function POST(req: NextRequest) {
 
   const file = formData.get("file") as File | null;
   try {
-    validatePdfUpload(file);
+    validatePdfUpload(file, undefined, EXTRACTABLE_MEDIA_TYPES);
   } catch (err) {
     return NextResponse.json(
       { fallback: true, error: err instanceof Error ? err.message : "Invalid upload." },
       { status: 400 }
     );
   }
+  const mediaType = file.type as ExtractableMediaType;
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const base64 = buffer.toString("base64");
 
-  // ── Upload PDF to storage ─────────────────────────────────────────────────
+  // ── Upload file to storage ────────────────────────────────────────────────
   // Upload before extraction so the file is safe even if Claude returns an error.
   const randomId = crypto.randomUUID();
-  const storagePath = `${user.id}/import/${randomId}.pdf`;
+  const storagePath = `${user.id}/import/${randomId}.${FILE_EXTENSIONS[mediaType]}`;
 
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
-    .upload(storagePath, buffer, { contentType: "application/pdf", upsert: false });
+    .upload(storagePath, buffer, { contentType: mediaType, upsert: false });
 
   if (uploadError) {
     return NextResponse.json(
-      { fallback: true, error: `Could not store the PDF: ${uploadError.message}` },
+      { fallback: true, error: `Could not store the file: ${uploadError.message}` },
       { status: 500 }
     );
   }
@@ -127,7 +140,7 @@ export async function POST(req: NextRequest) {
 
   // ── Claude extraction ─────────────────────────────────────────────────────
   try {
-    const fields = await extractJsonFromPdf<ExtractedCoFields>(base64, EXTRACTION_PROMPT);
+    const fields = await extractJsonFromPdf<ExtractedCoFields>(base64, EXTRACTION_PROMPT, mediaType);
     return NextResponse.json({ fields, pdfUrl } satisfies CoExtractResponse);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Extraction failed.";

@@ -11,6 +11,7 @@ import { fetchGeneralContractors, createGeneralContractor, GeneralContractor } f
 import { useJobs } from "@/hooks/useJobs";
 import JobCreatedModal from "@/components/JobCreatedModal";
 import YellowcardImportModal from "@/components/YellowcardImportModal";
+import ContractImportModal from "@/components/ContractImportModal";
 import GCCombobox from "@/components/GCCombobox";
 
 const SESSION_KEY = "yellowcard_draft";
@@ -149,7 +150,7 @@ export default function JobSetupPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [showYellowcardModal, setShowYellowcardModal] = useState(false);
-  const contractFileInputRef = useRef<HTMLInputElement>(null);
+  const [showContractModal, setShowContractModal] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [contractError, setContractError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -262,6 +263,7 @@ export default function JobSetupPage() {
       const json = await res.json();
       if (json.fallback) {
         setContractError(json.error ?? "Could not extract contract data.");
+        setShowContractModal(false);
         return;
       }
       sessionStorage.setItem(
@@ -271,9 +273,9 @@ export default function JobSetupPage() {
       router.push("/job-setup/contract-review");
     } catch (err) {
       setContractError(err instanceof Error ? err.message : "Could not extract contract data.");
+      setShowContractModal(false);
     } finally {
       setIsExtracting(false);
-      if (contractFileInputRef.current) contractFileInputRef.current.value = "";
     }
   }
 
@@ -399,19 +401,9 @@ export default function JobSetupPage() {
           >
             {isImporting ? "Reading file…" : "Job Import"}
           </button>
-          <input
-            ref={contractFileInputRef}
-            type="file"
-            accept=".pdf"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleContractFile(file);
-            }}
-          />
           <button
             type="button"
-            onClick={() => contractFileInputRef.current?.click()}
+            onClick={() => setShowContractModal(true)}
             disabled={isExtracting}
             className="rounded-lg border border-teal px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/10 disabled:opacity-50"
           >
@@ -855,6 +847,14 @@ export default function JobSetupPage() {
           isImporting={isImporting}
           onFile={handleYellowcardFile}
           onClose={() => setShowYellowcardModal(false)}
+        />
+      )}
+
+      {showContractModal && (
+        <ContractImportModal
+          isImporting={isExtracting}
+          onFile={handleContractFile}
+          onClose={() => setShowContractModal(false)}
         />
       )}
 

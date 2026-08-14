@@ -58,6 +58,7 @@ export default function ChangeOrderImportModal({ jobs, defaultJobId, onClose, on
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [isDragActive, setIsDragActive] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
   const [draft, setDraft] = useState<ExtractedCoFields | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -187,27 +188,90 @@ export default function ChangeOrderImportModal({ jobs, defaultJobId, onClose, on
           {!draft && (
             <>
               <p className="text-sm text-gray-500">
-                Upload a COR export (Clearstory or any other change-order document) — its fields will
-                pre-fill the form below for you to review before creating the change order.
+                Upload a COR export (Clearstory or any other change-order document) as a PDF or photo
+                — its fields will pre-fill the form below for you to review before creating the change
+                order.
               </p>
               <input
                 ref={fileRef}
                 type="file"
-                accept=".pdf"
+                accept=".pdf,.jpg,.jpeg,.png"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) handleFile(file);
+                  if (fileRef.current) fileRef.current.value = "";
                 }}
               />
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                disabled={isExtracting}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-6 text-sm font-semibold text-teal hover:border-teal hover:bg-teal/5 disabled:opacity-50"
+              <div
+                onClick={() => !isExtracting && fileRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (!isExtracting) setIsDragActive(true);
+                }}
+                onDragLeave={() => setIsDragActive(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragActive(false);
+                  const file = e.dataTransfer.files?.[0];
+                  if (!isExtracting && file) handleFile(file);
+                }}
+                className={`flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-12 text-center transition-colors ${
+                  isExtracting
+                    ? "cursor-default border-gray-200"
+                    : isDragActive
+                    ? "cursor-pointer border-teal bg-teal/5"
+                    : "cursor-pointer border-gray-200 hover:border-teal/50 hover:bg-gray-50"
+                }`}
               >
-                {isExtracting ? "Reading document…" : "Click to upload a COR PDF"}
-              </button>
+                {isExtracting ? (
+                  <>
+                    <svg
+                      className="h-8 w-8 animate-spin text-teal"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                      />
+                    </svg>
+                    <p className="text-sm font-semibold text-navy">Reading document…</p>
+                  </>
+                ) : (
+                  <>
+                    <svg
+                      className="h-8 w-8 text-teal"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M12 16V4m0 0L7 9m5-5l5 5"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M20 16v3a2 2 0 01-2 2H6a2 2 0 01-2-2v-3"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    <p className="text-sm font-semibold text-navy">Drag & drop your file here</p>
+                    <p className="text-sm text-gray-500">
+                      or <span className="font-semibold text-teal">browse</span> to choose a file
+                    </p>
+                    <p className="text-xs text-gray-400">.pdf, .jpg, or .png</p>
+                  </>
+                )}
+              </div>
               {extractError && (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3">
                   <p className="text-sm font-semibold text-red-800">Extraction failed</p>
