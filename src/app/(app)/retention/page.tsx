@@ -82,7 +82,7 @@ export default function RetentionPage() {
   const [paymentReference, setPaymentReference] = useState("");
   const [discrepancyNote, setDiscrepancyNote] = useState("");
   const [isSavingPayment, setIsSavingPayment] = useState(false);
-  const [fundingModal, setFundingModal] = useState<DbJob | null>(null);
+  const [fundingModal, setFundingModal] = useState<{ job: DbJob; release: RetentionRelease } | null>(null);
   const [confirmUndoId, setConfirmUndoId] = useState<string | null>(null);
   const [isUndoing, setIsUndoing] = useState(false);
   const [checkingUndoId, setCheckingUndoId] = useState<string | null>(null);
@@ -228,7 +228,7 @@ export default function RetentionPage() {
       closeMarkPaid();
       load();
       if (updated.status === "paid" && paidJob) {
-        setFundingModal(paidJob);
+        setFundingModal({ job: paidJob, release: updated });
       }
     } catch (err) {
       alert(err instanceof Error ? err.message : "Could not record payment.");
@@ -794,7 +794,8 @@ export default function RetentionPage() {
       {/* Funding questionnaire — shown when a retention payment is marked fully paid */}
       {fundingModal && (
         <FundingQuestionnaireModal
-          job={fundingModal}
+          job={fundingModal.job}
+          release={fundingModal.release}
           onClose={() => setFundingModal(null)}
           onArchived={() => {
             setFundingModal(null);

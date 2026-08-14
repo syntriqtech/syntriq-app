@@ -5,11 +5,14 @@ import Link from "next/link";
 import { DbJob, archiveJob } from "@/lib/jobs";
 import { verifyJobPayments, VerificationResult, UnpaidApp, UnpaidRelease } from "@/lib/jobPaymentVerification";
 import { formatDate } from "@/lib/dateUtils";
+import { RetentionRelease } from "@/lib/retentionReleasesDb";
+import { regenerateRetentionBillingPackage } from "@/lib/retentionBillingPackagePdf";
 
 type Step = "question" | "verifying" | "outstanding" | "confirm" | "done";
 
 type Props = {
   job: DbJob;
+  release: RetentionRelease;
   onClose: () => void;
   onArchived: () => void;
 };
@@ -20,12 +23,29 @@ const currency = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
 });
 
-export default function FundingQuestionnaireModal({ job, onClose, onArchived }: Props) {
+export default function FundingQuestionnaireModal({ job, release, onClose, onArchived }: Props) {
   const [step, setStep] = useState<Step>("question");
   const [verifyResult, setVerifyResult] = useState<VerificationResult | null>(null);
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [isDownloadingWaiver, setIsDownloadingWaiver] = useState(false);
+  const [waiverError, setWaiverError] = useState<string | null>(null);
+
+  // Only a *final* retention release produces an "unconditional final"
+  // waiver — a partial release's paid waiver is "unconditional progress"
+  // instead, which isn't what this action is for.
+  async function handleDownloadWaiver() {
+    setWaiverError(null);
+    setIsDownloadingWaiver(true);
+    try {
+      await regenerateRetentionBillingPackage(release, job);
+    } catch (err) {
+      setWaiverError(err instanceof Error ? err.message : "Could not generate waiver.");
+    } finally {
+      setIsDownloadingWaiver(false);
+    }
+  }
 
   // ── Verification ───────────────────────────────────────────────────────────
 
@@ -88,6 +108,25 @@ export default function FundingQuestionnaireModal({ job, onClose, onArchived }: 
             </button>
           )}
         </div>
+
+        {/* Signed unconditional final waiver — available as soon as this release
+            is marked paid, independent of whether the user goes on to archive. */}
+        {release.isFinal && (
+          <div className="flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50 px-6 py-3">
+            <p className="text-xs text-gray-500">Final retention payment recorded.</p>
+            <button
+              type="button"
+              onClick={handleDownloadWaiver}
+              disabled={isDownloadingWaiver}
+              className="flex-none rounded-lg border border-teal/30 bg-white px-2.5 py-1.5 text-xs font-semibold text-teal hover:bg-teal/5 disabled:opacity-50"
+            >
+              {isDownloadingWaiver ? "Preparing…" : "Download signed unconditional final"}
+            </button>
+          </div>
+        )}
+        {waiverError && (
+          <p className="border-b border-gray-100 bg-red-50 px-6 py-2 text-xs text-red-700">{waiverError}</p>
+        )}
 
         <div className="px-6 py-5">
 
