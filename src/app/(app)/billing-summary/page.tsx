@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useJobs } from "@/hooks/useJobs";
 import { computeJobBillingRows, JobBillingRow } from "@/lib/billingSummary";
+import { fetchCheckinsByMonth, currentMonth } from "@/lib/billingCheckinDb";
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -29,6 +30,7 @@ export default function BillingSummaryPage() {
   const [sortKey, setSortKey] = useState<SortKey>("aging");
   const [filters, setFilters] = useState<Set<FilterKey>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [readyToBillJobIds, setReadyToBillJobIds] = useState<Set<string>>(new Set());
 
   // Load data on mount
   useEffect(() => {
@@ -50,6 +52,23 @@ export default function BillingSummaryPage() {
       cancelled = true;
     };
   }, [jobs, isLoading]);
+
+  // "Ready to bill" — jobs the Billing Check-in flow was told "yes, billing
+  // this month" for, independent of whether a pay app has gone out yet.
+  useEffect(() => {
+    let cancelled = false;
+    fetchCheckinsByMonth(currentMonth())
+      .then((checkins) => {
+        if (cancelled) return;
+        setReadyToBillJobIds(new Set(checkins.filter((c) => c.decision === "yes").map((c) => c.jobId)));
+      })
+      .catch(() => {
+        if (!cancelled) setReadyToBillJobIds(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Apply filters
   const filtered = rows.filter((row) => {
@@ -294,14 +313,24 @@ export default function BillingSummaryPage() {
                           90+ overdue
                         </span>
                       )}
-                      {row.isNotBilledThisPeriod && (
-                        <span className="inline-block rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">
-                          Not billed
+                      {readyToBillJobIds.has(row.jobId) && (
+                        <span className="inline-block rounded-full bg-teal/10 px-2 py-1 text-xs font-semibold text-teal">
+                          Ready to bill
                         </span>
                       )}
-                      {row.isReadyToClose && (
-                        <span className="inline-block rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700">
-                          Ready to close
+                      {row.isNotBilledThisPeriod && (
+                        <span className="inline-block rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">
+                          {row.hasUnpaidApplication ? "Not paid" : "Not billed"}
+                        </span>
+                      )}
+                      {row.retentionBillStatus === "fully_billed" && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700">
+                          <span aria-hidden="true">✓</span> Retention billed
+                        </span>
+                      )}
+                      {row.retentionBillStatus === "partial" && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700">
+                          <span aria-hidden="true">◐</span> Retention partial
                         </span>
                       )}
                     </div>

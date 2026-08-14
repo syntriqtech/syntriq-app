@@ -30,7 +30,8 @@ export type JobBillingRow = {
   isReadyForRetention: boolean;
   isOverdue90plus: boolean;
   isNotBilledThisPeriod: boolean;
-  isReadyToClose: boolean;
+  hasUnpaidApplication: boolean;
+  retentionBillStatus: "not_billed" | "partial" | "fully_billed";
   agingSeverityScore: number;
   lastBillingDate: string | null;
 };
@@ -108,6 +109,12 @@ export async function computeJobBillingRows(
 
     const sortedApps = [...jobApps].sort((a, b) => a.applicationDate.localeCompare(b.applicationDate));
 
+    // True as soon as any single pay application still has money owed on it —
+    // distinct from openAR, which also folds in outstanding retention
+    // releases. Used to tell "hasn't been billed at all recently" apart from
+    // "was billed, just hasn't been paid yet" in the Status column.
+    let hasUnpaidApplication = false;
+
     for (const app of sortedApps) {
       const payments = await fetchPayAppPayments(app.id);
       const appPaymentTotal = payments.reduce((sum, p) => sum + p.amountPaid, 0);
@@ -116,6 +123,7 @@ export async function computeJobBillingRows(
       // Outstanding balance for this application = current payment due - amount paid
       const outstandingBalance = Math.max(0, app.currentPaymentDue - appPaymentTotal);
       openAR += outstandingBalance;
+      if (outstandingBalance > 0.01) hasUnpaidApplication = true;
 
       // Track last payment date across all applications
       if (payments.length > 0) {
@@ -180,7 +188,19 @@ export async function computeJobBillingRows(
     const isReadyForRetention = percentBilled >= 100 && retentionHeld > 0;
     const isOverdue90plus = amount90plus > 0;
     const isNotBilledThisPeriod = lastBillingDate ? daysBetween(lastBillingDate, today) > 30 : true;
-    const isReadyToClose = percentBilled >= 100 && openAR <= 0.01;
+
+    // Retention billing status — mirrors the status logic on the Retention
+    // page (billingRowToRetentionRow), based on how much of the held
+    // retention has actually been billed via a release, not whether it's
+    // been paid yet.
+    const totalRetentionReleased = jobReleases.reduce((sum, rel) => sum + rel.amountReleased, 0);
+    const retentionRemaining = Math.max(0, retentionHeld - totalRetentionReleased);
+    const retentionBillStatus: "not_billed" | "partial" | "fully_billed" =
+      retentionRemaining <= 0.01 && totalRetentionReleased > 0
+        ? "fully_billed"
+        : totalRetentionReleased > 0
+        ? "partial"
+        : "not_billed";
 
     // Aging severity score: weight buckets so 90+ dominates, break ties by openAR
     const agingSeverityScore =
@@ -215,7 +235,8 @@ export async function computeJobBillingRows(
       isReadyForRetention,
       isOverdue90plus,
       isNotBilledThisPeriod,
-      isReadyToClose,
+      hasUnpaidApplication,
+      retentionBillStatus,
       agingSeverityScore,
       lastBillingDate,
     });
