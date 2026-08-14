@@ -442,14 +442,14 @@ export default function RetentionPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
-                <th className="px-5 py-3">Job</th>
-                <th className="px-5 py-3">GC</th>
-                <th className="px-5 py-3 text-right">Contract Sum</th>
-                <th className="px-5 py-3 text-right">Retention Held</th>
-                <th className="px-5 py-3 text-right">Released</th>
-                <th className="px-5 py-3 text-right">Remaining</th>
-                <th className="px-5 py-3 text-right">% Billed</th>
-                <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3 whitespace-nowrap">Job</th>
+                <th className="px-5 py-3 whitespace-nowrap">GC</th>
+                <th className="px-5 py-3 text-right whitespace-nowrap">Contract Sum</th>
+                <th className="px-5 py-3 text-right whitespace-nowrap">Retention Held</th>
+                <th className="px-5 py-3 text-right whitespace-nowrap">Released</th>
+                <th className="px-5 py-3 text-right whitespace-nowrap">Remaining</th>
+                <th className="px-5 py-3 text-right whitespace-nowrap">Billed %</th>
+                <th className="px-5 py-3 whitespace-nowrap">Status</th>
                 <th className="px-5 py-3"></th>
               </tr>
             </thead>
@@ -462,44 +462,46 @@ export default function RetentionPage() {
                       row.status === "fully_released" ? "bg-green-50/30" : undefined
                     }
                   >
-                    <td className="px-5 py-3.5">
+                    <td className="px-5 py-3.5 align-middle">
                       <button
                         type="button"
                         onClick={() => setExpandedJobId(expandedJobId === row.jobId ? null : row.jobId)}
-                        className="font-semibold text-navy hover:text-teal text-left flex items-center gap-1"
+                        className="group block text-left leading-snug"
                       >
-                        <span>{row.jobName || <span className="text-amber-600">⚠ No name</span>}</span>
-                        <span className="text-xs text-gray-400 font-normal">#{row.jobNumber}</span>
+                        <span className="font-semibold text-navy group-hover:text-teal">
+                          {row.jobName || <span className="text-amber-600">⚠ No name</span>}
+                        </span>{" "}
+                        <span className="whitespace-nowrap text-xs font-normal text-gray-400">#{row.jobNumber}</span>
                         {row.releases.length > 0 && (
-                          <span className="text-xs text-gray-400 font-normal">
-                            ({row.releases.length} release{row.releases.length !== 1 ? "s" : ""})
-                            {expandedJobId === row.jobId ? " ▴" : " ▾"}
+                          <span className="ml-1.5 inline-flex items-center gap-1 whitespace-nowrap align-middle text-xs font-normal text-gray-400">
+                            {row.releases.length > 1 && <span>{row.releases.length} releases</span>}
+                            <span aria-hidden="true">{expandedJobId === row.jobId ? "▴" : "▾"}</span>
                           </span>
                         )}
                       </button>
                     </td>
-                    <td className="px-5 py-3.5 text-navy">{row.customer}</td>
-                    <td className="px-5 py-3.5 text-right tabular-nums text-navy">
+                    <td className="px-5 py-3.5 align-middle text-navy">{row.customer}</td>
+                    <td className="px-5 py-3.5 align-middle text-right tabular-nums text-navy">
                       {currency.format(row.contractSum)}
                     </td>
-                    <td className="px-5 py-3.5 text-right tabular-nums font-semibold text-navy">
+                    <td className="px-5 py-3.5 align-middle text-right tabular-nums font-semibold text-navy">
                       {currency.format(row.retentionHeld)}
                     </td>
-                    <td className="px-5 py-3.5 text-right tabular-nums text-green-700 font-semibold">
+                    <td className="px-5 py-3.5 align-middle text-right tabular-nums text-green-700 font-semibold">
                       {row.totalReleased > 0 ? currency.format(row.totalReleased) : <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-5 py-3.5 text-right tabular-nums text-navy">
+                    <td className="px-5 py-3.5 align-middle text-right tabular-nums text-navy">
                       {currency.format(row.remaining)}
                     </td>
-                    <td className="px-5 py-3.5 text-right tabular-nums text-gray-600">
+                    <td className="px-5 py-3.5 align-middle text-right tabular-nums text-gray-600">
                       {pct.format(row.percentBilled / 100)}
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-5 py-3.5 align-middle">
                       <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLE[row.status] ?? ""}`}>
                         {STATUS_LABEL[row.status] ?? row.status}
                       </span>
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-5 py-3.5 align-middle">
                       {row.status === "fully_released" ? (
                         <span className="text-xs text-gray-400">Retention submitted</span>
                       ) : (
@@ -540,11 +542,11 @@ export default function RetentionPage() {
                                 const hasDiscrepancy = rel.status === "paid" && Math.abs(rel.discrepancy) > 0.01;
                                 return (
                                 <tr key={rel.id} className="bg-white">
-                                  <td className="px-4 py-2 font-semibold text-navy">#{rel.releaseNumber}</td>
-                                  <td className="px-4 py-2 text-gray-600">{formatDate(rel.releaseDate)}</td>
-                                  <td className="px-4 py-2 text-gray-600">{rel.isFinal ? "Final" : "Partial"}</td>
-                                  <td className="px-4 py-2 text-right tabular-nums font-semibold text-navy">{currencyFull.format(rel.amountReleased)}</td>
-                                  <td className={`px-4 py-2 text-right tabular-nums ${hasDiscrepancy ? "text-amber-700" : "text-green-700"}`}>
+                                  <td className="px-4 py-2 align-top font-semibold text-navy">#{rel.releaseNumber}</td>
+                                  <td className="px-4 py-2 align-top text-gray-600">{formatDate(rel.releaseDate)}</td>
+                                  <td className="px-4 py-2 align-top text-gray-600">{rel.isFinal ? "Final" : "Partial"}</td>
+                                  <td className="px-4 py-2 align-top text-right tabular-nums font-semibold text-navy">{currencyFull.format(rel.amountReleased)}</td>
+                                  <td className={`px-4 py-2 align-top text-right tabular-nums ${hasDiscrepancy ? "text-amber-700" : "text-green-700"}`}>
                                     {rel.amountPaid > 0 ? (
                                       <div className="flex flex-col items-end gap-0.5">
                                         <span className="inline-flex items-center justify-end gap-1">
@@ -570,7 +572,7 @@ export default function RetentionPage() {
                                       <span className="text-gray-300">—</span>
                                     )}
                                   </td>
-                                  <td className="px-4 py-2">
+                                  <td className="px-4 py-2 align-top">
                                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                                       rel.status === "paid" ? "bg-green-100 text-green-700" :
                                       rel.status === "billed" ? "bg-blue-100 text-blue-700" :
@@ -579,7 +581,8 @@ export default function RetentionPage() {
                                       {rel.status === "paid" ? "Paid" : rel.status === "billed" ? "Billed" : "Draft"}
                                     </span>
                                   </td>
-                                  <td className="px-4 py-2">
+                                  <td className="px-4 py-2 align-top">
+                                    <div className="flex flex-wrap items-start justify-end gap-1.5">
                                     {rel.status === "billed" && (
                                       confirmCancelId === rel.id ? (
                                         <span className="flex items-center gap-1.5">
@@ -673,15 +676,14 @@ export default function RetentionPage() {
                                         </button>
                                       )
                                     )}
-                                    <div className="mt-1 flex justify-end">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDownloadPackage(rel, row.jobId)}
-                                        disabled={downloadingReleaseId === rel.id}
-                                        className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-semibold text-gray-500 hover:bg-gray-100 disabled:opacity-50"
-                                      >
-                                        {downloadingReleaseId === rel.id ? "Building…" : "Download Package"}
-                                      </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDownloadPackage(rel, row.jobId)}
+                                      disabled={downloadingReleaseId === rel.id}
+                                      className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-semibold text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+                                    >
+                                      {downloadingReleaseId === rel.id ? "Building…" : "Download Package"}
+                                    </button>
                                     </div>
                                   </td>
                                 </tr>
