@@ -99,7 +99,9 @@ export default function OpenARWidget({
                   <div className={`truncate text-sm font-semibold ${is90plus ? "text-red-800" : "text-navy"}`}>
                     {row.jobName || row.jobNumber}
                   </div>
-                  <div className="text-xs text-gray-400">{row.customer}</div>
+                  <div className="text-xs text-gray-400">
+                    {row.jobName ? `${row.jobNumber} · ${row.customer}` : row.customer}
+                  </div>
                 </div>
                 <div className="flex flex-none items-center gap-2">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${BUCKET_STYLE[bucket]}`}>
