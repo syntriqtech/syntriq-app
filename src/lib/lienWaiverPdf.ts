@@ -95,8 +95,8 @@ function drawSignatureLine(doc: jsPDF, label: string, y: number, lineWidth: numb
   doc.setLineWidth(0.5);
   doc.line(lineX, y + 1.5, lineX + lineWidth, y + 1.5);
   if (signatureDataUrl) {
-    const imgWidth = Math.min(lineWidth, 160);
-    doc.addImage(signatureDataUrl, "PNG", lineX + 4, y - 30, imgWidth, 32);
+    const imgWidth = Math.min(lineWidth, 111);
+    doc.addImage(signatureDataUrl, "PNG", lineX + 4, y - 22, imgWidth, 22);
   }
   return y + 18;
 }
