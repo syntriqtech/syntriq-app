@@ -410,7 +410,7 @@ export default function DownloadPackagePage() {
           <TextField
             label="Signer name & title"
             id="claimantTitle"
-            placeholder="e.g. Jason Blancaflor, Owner"
+            placeholder="e.g. Jane Doe, Owner"
             value={claimantTitle}
             onChange={(e) => setClaimantTitle(e.target.value)}
           />

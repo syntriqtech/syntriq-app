@@ -38,6 +38,23 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
+  // Trial hard-lock: checked on every request (not just at login) so a
+  // session that goes stale mid-use gets cut off immediately, not just on
+  // next sign-in. is_trial_expired() only ever returns true for a user who
+  // redeemed a trial key whose expires_at has passed — standard-key users
+  // are unaffected. API routes get a 403 instead of a redirect since a
+  // fetch() call following a redirect to an external HTML page would just
+  // fail confusingly; either way, no functionality is reachable.
+  if (user) {
+    const { data: trialExpired } = await supabase.rpc("is_trial_expired");
+    if (trialExpired) {
+      if (isApiRoute) {
+        return NextResponse.json({ error: "Trial expired" }, { status: 403 });
+      }
+      return NextResponse.redirect("https://syntriqtech.com/pricing");
+    }
+  }
+
   if (user && isLoginPage) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }

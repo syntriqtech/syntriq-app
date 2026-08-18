@@ -115,7 +115,7 @@ export default function CompanySetupPage() {
 
   return (
     <main className="flex min-h-screen flex-1 items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-gray-100 bg-white p-8 shadow-sm">
+      <div className="w-full max-w-md animate-fade-slide-up rounded-2xl border border-gray-100 bg-white p-8 shadow-sm">
         <div className="flex flex-col items-center gap-2">
           <Image src="/SyntriqLogo2.png" alt="Syntriq" width={72} height={72} priority />
         </div>
@@ -125,7 +125,7 @@ export default function CompanySetupPage() {
             {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
               <span
                 key={i}
-                className={`h-1.5 w-6 rounded-full transition-colors ${
+                className={`h-1.5 w-6 rounded-full transition-all duration-300 ease-out ${
                   i < step ? "bg-teal" : "bg-gray-200"
                 }`}
               />
@@ -133,6 +133,7 @@ export default function CompanySetupPage() {
           </div>
         )}
 
+        <div key={step} className="animate-fade-slide-up">
         {step === 0 && (
           <div className="mt-6 flex flex-col items-center gap-4 text-center">
             <h1 className="text-xl font-semibold text-navy">Welcome to Syntriq</h1>
@@ -140,7 +141,11 @@ export default function CompanySetupPage() {
               Let&apos;s set up your company profile — this powers your pay applications and lien
               waivers.
             </p>
-            <Button type="button" className="mt-2" onClick={goNext}>
+            <Button
+              type="button"
+              className="mt-2 transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              onClick={goNext}
+            >
               Get Started
             </Button>
           </div>
@@ -156,7 +161,7 @@ export default function CompanySetupPage() {
                 <TextField
                   id="companyName"
                   label="Company name"
-                  placeholder="e.g., California Tile Installers"
+                  placeholder="e.g., Legacy Construction"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
                   autoFocus
@@ -173,7 +178,7 @@ export default function CompanySetupPage() {
                 <TextField
                   id="contactName"
                   label="Contact name"
-                  placeholder="e.g., Jason Blancaflor"
+                  placeholder="e.g., Jane Doe"
                   value={contactName}
                   onChange={(e) => setContactName(e.target.value)}
                   autoFocus
@@ -264,7 +269,11 @@ export default function CompanySetupPage() {
             )}
 
             <div className="mt-4 flex flex-col gap-3">
-              <Button type="submit" disabled={!canContinue}>
+              <Button
+                type="submit"
+                disabled={!canContinue}
+                className="transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              >
                 Continue
               </Button>
               {step === 5 && (
@@ -297,7 +306,7 @@ export default function CompanySetupPage() {
                   <img
                     src={logoPreview}
                     alt="Logo preview"
-                    className="max-h-[90px] max-w-[240px] object-contain"
+                    className="max-h-[90px] max-w-[240px] animate-fade-slide-up object-contain"
                   />
                 ) : (
                   <span className="text-xs text-gray-400">No logo selected</span>
@@ -326,7 +335,12 @@ export default function CompanySetupPage() {
             {error && <p className="text-center text-sm text-red-600">{error}</p>}
 
             <div className="mt-4 flex flex-col gap-3">
-              <Button type="button" onClick={finishSetup} disabled={!logoFile || isSubmitting}>
+              <Button
+                type="button"
+                onClick={finishSetup}
+                disabled={!logoFile || isSubmitting}
+                className="transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              >
                 {isSubmitting ? "Saving…" : "Finish"}
               </Button>
               <button
@@ -348,6 +362,7 @@ export default function CompanySetupPage() {
             </div>
           </div>
         )}
+        </div>
       </div>
     </main>
   );

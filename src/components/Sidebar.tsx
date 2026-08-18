@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import AccountMenu from "@/components/AccountMenu";
+import TrialStatusBanner from "@/components/TrialStatusBanner";
 import { useCoExposure } from "@/hooks/useCoExposure";
 import { useRetentionBadge } from "@/hooks/useRetentionBadge";
 import { useBillingCheckinBadge } from "@/hooks/useBillingCheckinBadge";
@@ -281,6 +282,7 @@ export default function Sidebar() {
         )}
       </div>
 
+      <TrialStatusBanner />
       <AccountMenu />
     </aside>
   );

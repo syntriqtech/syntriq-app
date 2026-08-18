@@ -130,7 +130,7 @@ export default function CompanyProfilePage() {
             required
             value={companyName}
             onChange={(e) => setCompanyName(e.target.value)}
-            placeholder="e.g., California Tile Installers"
+            placeholder="e.g., Legacy Construction"
           />
           <TextField
             label="Contact name"
@@ -138,7 +138,7 @@ export default function CompanyProfilePage() {
             required
             value={contactName}
             onChange={(e) => setContactName(e.target.value)}
-            placeholder="e.g., Jason Blancaflor"
+            placeholder="e.g., Jane Doe"
           />
           <div className="sm:col-span-2">
             <TextField

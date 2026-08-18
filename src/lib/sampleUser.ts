@@ -1,11 +1,11 @@
 import { createClient } from "@/lib/supabase/client";
 
 const DEFAULT_USER = {
-  name: "Jason Blancaflor",
-  email: "jason@caltileinstallers.com",
-  company: "California Tile Installers",
+  name: "Jane Doe",
+  email: "jane@legacyconstruction.com",
+  company: "Legacy Construction",
   companyAddress: "4820 Harbor Industrial Way, Long Beach, CA 90802",
-  initials: "JB",
+  initials: "JD",
 };
 
 export const sampleUser = DEFAULT_USER;

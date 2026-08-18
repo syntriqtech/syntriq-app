@@ -81,7 +81,7 @@ export default function AccountSettingsPage() {
             <TextField
               id="fullName"
               label="Full name"
-              placeholder="e.g. Jason Blancaflor"
+              placeholder="e.g. Jane Doe"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
             />

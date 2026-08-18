@@ -269,7 +269,7 @@ export default function LienWaiversPage() {
           <TextField
             label="Claimant's title (signer name & title)"
             id="claimantTitle"
-            placeholder="e.g. Jason Blancaflor, Owner"
+            placeholder="e.g. Jane Doe, Owner"
             value={claimantTitle}
             onChange={(e) => setClaimantTitle(e.target.value)}
           />

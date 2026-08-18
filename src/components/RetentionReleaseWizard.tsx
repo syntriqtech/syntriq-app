@@ -753,7 +753,7 @@ export default function RetentionReleaseWizard({
               type="text"
               value={claimantTitle}
               onChange={(e) => setClaimantTitle(e.target.value)}
-              placeholder="e.g. Jason Blancaflor, Owner"
+              placeholder="e.g. Jane Doe, Owner"
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-navy placeholder-gray-400 focus:border-teal focus:outline-none focus:ring-1 focus:ring-teal"
             />
           </div>
