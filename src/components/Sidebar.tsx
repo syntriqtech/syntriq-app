@@ -20,11 +20,11 @@ type NavItem = {
 
 const DEFAULT_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard",          href: "/dashboard",       pinned: true },
+  { label: "Job Setup",          href: "/job-setup" },
   { label: "Job List",           href: "/jobs" },
   { label: "AR Aging Summary",   href: "/billing-summary" },
   { label: "Record Payment",     href: "/pay-applications" },
   { label: "Billing Check-in",   href: "/billing-checkin", badge: "checkin" },
-  { label: "Job Setup",          href: "/job-setup" },
   { label: "Create Pay App",     href: "/sov" },
   { label: "Change Orders",      href: "/change-orders",   badge: "co" },
   { label: "Retention",          href: "/retention",       badge: "retention" },
