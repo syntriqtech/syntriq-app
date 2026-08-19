@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUserContext } from "@/lib/currentUserContext";
 
 // Canonical month helpers — also used by the Billing Check-in page itself,
 // so there's one definition of "current month" / "next month" shared by
@@ -54,15 +55,12 @@ export async function upsertCheckin(
   decision: "yes" | "no"
 ): Promise<void> {
   const supabase = createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("Not signed in.");
+  const { userId, organizationId } = await getCurrentUserContext();
 
   const { error } = await supabase
     .from("billing_checkins")
     .upsert(
-      { job_id: jobId, user_id: userId, month, decision },
+      { job_id: jobId, user_id: userId, organization_id: organizationId, month, decision },
       { onConflict: "job_id,month" }
     );
   if (error) throw new Error(error.message);

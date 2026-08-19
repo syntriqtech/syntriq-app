@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUserContext } from "@/lib/currentUserContext";
 
 export type ChangeOrderStatus = "pending" | "submitted" | "approved" | "rejected" | "void";
 export type SovImpactType = "new_line_item" | "existing_line_item";
@@ -129,16 +130,14 @@ export type CreateCoInput = {
 
 export async function createChangeOrder(input: CreateCoInput): Promise<ChangeOrder> {
   const supabase = createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("Not signed in.");
+  const { userId, organizationId } = await getCurrentUserContext();
 
   const { data, error } = await supabase
     .from("change_orders")
     .insert({
       job_id: input.jobId,
       user_id: userId,
+      organization_id: organizationId,
       description: input.description,
       amount: input.amount,
       pco_number: input.pcoNumber || null,
@@ -235,10 +234,7 @@ export async function setChangeOrderStatus(
 export async function applyChangeOrder(id: string): Promise<void> {
   const supabase = createClient();
 
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("Not signed in.");
+  const { userId, organizationId } = await getCurrentUserContext();
 
   const { data: coRow, error: coError } = await supabase
     .from("change_orders")
@@ -283,6 +279,7 @@ export async function applyChangeOrder(id: string): Promise<void> {
       .insert({
         job_id: co.jobId,
         user_id: userId,
+        organization_id: organizationId,
         application_number,
         application_date,
         period_to,

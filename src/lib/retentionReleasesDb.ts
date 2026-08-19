@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUserContext } from "@/lib/currentUserContext";
 import { autoMarkBillingThisMonthIfCurrent } from "@/lib/billingCheckinDb";
 
 export type RetentionReleaseStatus = "draft" | "billed" | "paid";
@@ -173,10 +174,7 @@ export type CreateReleaseInput = {
 
 export async function createRetentionRelease(input: CreateReleaseInput): Promise<RetentionRelease> {
   const supabase = createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("Not signed in.");
+  const { userId, organizationId } = await getCurrentUserContext();
 
   const releaseNumber = await getNextReleaseNumber(input.jobId);
 
@@ -185,6 +183,7 @@ export async function createRetentionRelease(input: CreateReleaseInput): Promise
     .insert({
       job_id: input.jobId,
       user_id: userId,
+      organization_id: organizationId,
       release_number: releaseNumber,
       release_date: input.releaseDate,
       amount_released: input.amountReleased,

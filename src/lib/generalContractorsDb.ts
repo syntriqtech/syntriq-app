@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUserContext } from "@/lib/currentUserContext";
 
 export type GeneralContractor = {
   id: string;
@@ -52,15 +53,13 @@ export async function createGeneralContractor(gc: NewGeneralContractor): Promise
   if (!trimmedName) throw new Error("GC name is required.");
 
   const supabase = createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("Not signed in.");
+  const { userId, organizationId } = await getCurrentUserContext();
 
   const { data, error } = await supabase
     .from("general_contractors")
     .insert({
       user_id: userId,
+      organization_id: organizationId,
       name: trimmedName,
       billing_address: gc.billingAddress?.trim() ?? "",
       payment_terms: gc.paymentTerms?.trim() ?? "",

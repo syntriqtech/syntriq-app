@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUserContext } from "@/lib/currentUserContext";
 import { SOVLineItem } from "@/lib/sovData";
 import { computeLine, sumLines, previousCertificates } from "@/lib/payAppMath";
 import {
@@ -113,10 +114,7 @@ export async function saveSovItems(
   revision?: SovRevisionInput
 ) {
   const supabase = createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("Not signed in.");
+  const { userId, organizationId } = await getCurrentUserContext();
 
   const { error: deleteError } = await supabase
     .from("sov_line_items")
@@ -131,6 +129,7 @@ export async function saveSovItems(
   ].map((entry) => ({
     job_id: jobId,
     user_id: userId,
+    organization_id: organizationId,
     application_number: applicationNumber,
     application_date: applicationDate,
     period_to: periodTo,

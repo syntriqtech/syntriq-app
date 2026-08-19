@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUserContext } from "@/lib/currentUserContext";
 
 export type CompanyProfile = {
   id: string;
@@ -155,10 +156,7 @@ export async function saveCompanyProfile(
   contactPhone?: string
 ): Promise<CompanyProfile> {
   const supabase = createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("Not signed in.");
+  const { userId } = await getCurrentUserContext();
 
   const companyAddress = composeAddress(streetAddress, city, state, zipCode);
 
@@ -196,9 +194,19 @@ export async function saveCompanyProfile(
     if (error) throw new Error(error.message);
     return rowToCompanyProfile(data);
   } else {
+    // First-ever save for this account — this is also the one guaranteed
+    // choke point every signup passes through (see src/proxy.ts's
+    // company_setup_completed gate), so it's where a brand-new account
+    // gets its organization created for the first time.
+    const { data: organizationId, error: bootstrapError } = await supabase.rpc(
+      "bootstrap_organization",
+      { p_name: companyName }
+    );
+    if (bootstrapError) throw new Error(bootstrapError.message);
+
     const { data, error } = await supabase
       .from("company_profile")
-      .insert({ user_id: userId, ...payload })
+      .insert({ user_id: userId, organization_id: organizationId, ...payload })
       .select()
       .single();
 

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUserContext } from "@/lib/currentUserContext";
 
 // These five presets are always available without any DB entry.
 // User-added platforms are stored in the billing_platforms table and merged in.
@@ -22,13 +23,13 @@ export async function addBillingPlatform(name: string): Promise<void> {
   if (!trimmed || PRESETS.includes(trimmed)) return;
 
   const supabase = createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("Not signed in.");
+  const { userId, organizationId } = await getCurrentUserContext();
 
   const { error } = await supabase
     .from("billing_platforms")
-    .upsert({ user_id: userId, name: trimmed }, { onConflict: "user_id,name" });
+    .upsert(
+      { user_id: userId, organization_id: organizationId, name: trimmed },
+      { onConflict: "organization_id,name" }
+    );
   if (error) throw new Error(error.message);
 }

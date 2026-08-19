@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUserContext } from "@/lib/currentUserContext";
 
 export type PayAppPayment = {
   id: string;
@@ -46,16 +47,14 @@ export async function recordPayment(
   notes: string
 ): Promise<PayAppPayment> {
   const supabase = createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("Not signed in.");
+  const { userId, organizationId } = await getCurrentUserContext();
 
   const { data, error } = await supabase
     .from("pay_app_payments")
     .insert({
       pay_app_id: payAppId,
       user_id: userId,
+      organization_id: organizationId,
       payment_date: paymentDate,
       amount_paid: amountPaid,
       reference_number: referenceNumber,

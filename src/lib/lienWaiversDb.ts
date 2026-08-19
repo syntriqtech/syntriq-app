@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUserContext } from "@/lib/currentUserContext";
 import { LienWaiverKind } from "@/lib/lienWaiverPdf";
 
 export type LienWaiver = {
@@ -59,16 +60,14 @@ export async function recordLienWaiverGenerated(params: {
   revisionNumber?: number;
 }): Promise<LienWaiver> {
   const supabase = createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("Not signed in.");
+  const { userId, organizationId } = await getCurrentUserContext();
 
   const { data, error } = await supabase
     .from("lien_waivers")
     .insert({
       job_id: params.jobId,
       user_id: userId,
+      organization_id: organizationId,
       application_number: params.applicationNumber,
       kind: params.kind,
       amount_of_check: params.amountOfCheck,

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUserContext } from "@/lib/currentUserContext";
 import { JobSetup } from "@/lib/jobSetupData";
 
 export type DbJob = JobSetup & { id: string; archivedAt: string | null };
@@ -169,15 +170,13 @@ export async function permanentlyDeleteJob(id: string): Promise<void> {
 
 export async function createJob(job: JobSetup): Promise<DbJob> {
   const supabase = createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("Not signed in.");
+  const { userId, organizationId } = await getCurrentUserContext();
 
   const { data, error } = await supabase
     .from("jobs")
     .insert({
       user_id: userId,
+      organization_id: organizationId,
       job_name: job.jobName,
       job_number: job.jobNumber,
       customer: job.customer,

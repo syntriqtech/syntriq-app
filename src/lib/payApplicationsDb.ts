@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUserContext } from "@/lib/currentUserContext";
 import { autoMarkBillingThisMonthIfCurrent } from "@/lib/billingCheckinDb";
 
 export type PayApplicationStatus = "draft" | "submitted" | "revised" | "certified" | "paid";
@@ -71,16 +72,14 @@ export async function markApplicationBilled(
   currentPaymentDue: number = amountBilled
 ): Promise<PayApplication> {
   const supabase = createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw userError;
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("Not signed in.");
+  const { userId, organizationId } = await getCurrentUserContext();
 
   const { data, error } = await supabase
     .from("pay_applications")
     .insert({
       job_id: jobId,
       user_id: userId,
+      organization_id: organizationId,
       application_number: applicationNumber,
       application_date: applicationDate,
       period_to: periodTo,
