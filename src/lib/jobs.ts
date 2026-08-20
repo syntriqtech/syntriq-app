@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUserContext } from "@/lib/currentUserContext";
 import { logActivity } from "@/lib/activityLogDb";
+import { PLAN_LIMITS, Plan } from "@/lib/planLimits";
 import { JobSetup } from "@/lib/jobSetupData";
 
 export type DbJob = JobSetup & { id: string; archivedAt: string | null };
@@ -180,6 +181,28 @@ export async function permanentlyDeleteJob(id: string): Promise<void> {
 export async function createJob(job: JobSetup): Promise<DbJob> {
   const supabase = createClient();
   const { userId, organizationId } = await getCurrentUserContext();
+
+  // Client-side pre-check for a friendly error, mirroring the pattern used
+  // elsewhere (e.g. generalContractorsDb.ts's delete guard) — not also a DB
+  // trigger in this v1, since the threat model here is a user working
+  // around their own org's own plan limit, not cross-tenant data.
+  if (organizationId) {
+    const { data: org } = await supabase.from("organizations").select("plan").eq("id", organizationId).single();
+    const limits = org?.plan ? PLAN_LIMITS[org.plan as Plan] : null;
+    if (limits?.maxActiveJobs != null) {
+      const { count } = await supabase
+        .from("jobs")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
+        .is("deleted_at", null)
+        .is("archived_at", null);
+      if ((count ?? 0) >= limits.maxActiveJobs) {
+        throw new Error(
+          `Your ${org!.plan} plan allows up to ${limits.maxActiveJobs} active jobs. Upgrade to Pro for unlimited jobs.`
+        );
+      }
+    }
+  }
 
   const { data, error } = await supabase
     .from("jobs")
