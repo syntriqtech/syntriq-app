@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { sampleUser, getContractorInfo } from "@/lib/sampleUser";
 import { createClient } from "@/lib/supabase/client";
+import { usePlan } from "@/hooks/usePlan";
+import PlanBadge from "@/components/PlanBadge";
 
 const MENU_ITEMS = [
   { label: "Account settings", href: "/account-settings" },
@@ -20,6 +22,7 @@ export default function AccountMenu() {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [user, setUser] = useState(sampleUser);
+  const { plan } = usePlan();
 
   useEffect(() => {
     getContractorInfo().then(setUser).catch(() => {});
@@ -112,8 +115,11 @@ export default function AccountMenu() {
           {user.initials}
         </span>
         <span className="min-w-0 flex-1">
-          <div className="truncate text-[13.5px] font-bold leading-tight text-navy">
-            {user.name.split(" ")[0]}
+          <div className="flex items-center gap-1.5">
+            <div className="truncate text-[13.5px] font-bold leading-tight text-navy">
+              {user.name.split(" ")[0]}
+            </div>
+            {plan && <PlanBadge plan={plan} />}
           </div>
           <div className="truncate text-[11.5px] text-gray-500">
             {user.company}

@@ -13,6 +13,8 @@ import JobCreatedModal from "@/components/JobCreatedModal";
 import YellowcardImportModal from "@/components/YellowcardImportModal";
 import ContractImportModal from "@/components/ContractImportModal";
 import GCCombobox from "@/components/GCCombobox";
+import ProUpgradeModal from "@/components/ProUpgradeModal";
+import { usePlan } from "@/hooks/usePlan";
 
 const SESSION_KEY = "yellowcard_draft";
 const CONTRACT_SESSION_KEY = "contract_draft";
@@ -151,6 +153,8 @@ export default function JobSetupPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const [showYellowcardModal, setShowYellowcardModal] = useState(false);
   const [showContractModal, setShowContractModal] = useState(false);
+  const [showProUpgrade, setShowProUpgrade] = useState(false);
+  const { plan } = usePlan();
   const [isExtracting, setIsExtracting] = useState(false);
   const [contractError, setContractError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -403,7 +407,7 @@ export default function JobSetupPage() {
           </button>
           <button
             type="button"
-            onClick={() => setShowContractModal(true)}
+            onClick={() => (plan === "pro" ? setShowContractModal(true) : setShowProUpgrade(true))}
             disabled={isExtracting}
             className="rounded-lg border border-teal px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/10 disabled:opacity-50"
           >
@@ -856,6 +860,10 @@ export default function JobSetupPage() {
           onFile={handleContractFile}
           onClose={() => setShowContractModal(false)}
         />
+      )}
+
+      {showProUpgrade && (
+        <ProUpgradeModal featureName="Import Contract (AI)" onClose={() => setShowProUpgrade(false)} />
       )}
 
       {showCreatedToast && (

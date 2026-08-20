@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireProPlan } from "@/lib/requirePlan";
 import {
   extractJsonFromPdf,
   validatePdfUpload,
@@ -102,14 +102,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── Auth ─────────────────────────────────────────────────────────────────
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ fallback: true, error: "Not signed in." }, { status: 401 });
+  // ── Auth + plan gate ─────────────────────────────────────────────────────
+  // Import Contract (AI) is Pro-only.
+  const gate = await requireProPlan();
+  if (!gate.ok) {
+    return NextResponse.json({ fallback: true, error: gate.message }, { status: gate.status });
   }
+  const { user, supabase } = gate;
 
   // ── Parse upload ─────────────────────────────────────────────────────────
   let formData: FormData;

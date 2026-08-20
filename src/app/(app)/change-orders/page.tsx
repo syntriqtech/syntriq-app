@@ -17,6 +17,8 @@ import ChangeOrderDetailModal from "@/components/ChangeOrderDetailModal";
 import DonutPercent from "@/components/DonutPercent";
 import JobListTable from "@/components/JobListTable";
 import KpiStrip from "@/components/KpiStrip";
+import ProUpgradeModal from "@/components/ProUpgradeModal";
+import { usePlan } from "@/hooks/usePlan";
 import { formatDate } from "@/lib/dateUtils";
 
 const currency = new Intl.NumberFormat("en-US", {
@@ -110,6 +112,8 @@ export default function ChangeOrdersPage() {
   const [filter, setFilter] = useState<FilterKey>("all");
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showProUpgrade, setShowProUpgrade] = useState(false);
+  const { plan } = usePlan();
   const [detailCo, setDetailCo] = useState<ChangeOrder | null>(null);
   const [deletedCos, setDeletedCos] = useState<ChangeOrder[]>([]);
   const [showDeleted, setShowDeleted] = useState(false);
@@ -362,7 +366,7 @@ export default function ChangeOrdersPage() {
         </div>
         <button
           type="button"
-          onClick={() => setShowImport(true)}
+          onClick={() => (plan === "pro" ? setShowImport(true) : setShowProUpgrade(true))}
           className="rounded-lg border border-teal px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/10"
         >
           Import Change Order (AI)
@@ -611,6 +615,10 @@ export default function ChangeOrdersPage() {
             setShowImport(false);
           }}
         />
+      )}
+
+      {showProUpgrade && (
+        <ProUpgradeModal featureName="Import Change Order (AI)" onClose={() => setShowProUpgrade(false)} />
       )}
 
       {/* Detail Modal */}
