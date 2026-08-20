@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 const MENU_ITEMS = [
   { label: "Account settings", href: "/account-settings" },
   { label: "Company profile",  href: "/company-profile" },
+  { label: "Team & Users",     href: "/team-users" },
   { label: "Customers",        href: "/customers" },
   { label: "Billing & plan",   href: "/billing-plan" },
 ];
