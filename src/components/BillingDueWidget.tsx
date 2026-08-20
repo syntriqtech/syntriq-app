@@ -101,7 +101,9 @@ export default function BillingDueWidget({
                 </div>
               </div>
               <span className={`flex-none rounded-full px-2.5 py-0.5 text-xs font-semibold ${URGENCY_STYLE[tier]}`}>
-                {daysLeft <= 0
+                {daysLeft < 0
+                  ? `Due ${-daysLeft} day${-daysLeft === 1 ? "" : "s"} ago`
+                  : daysLeft === 0
                   ? "Due today"
                   : daysLeft === 1
                   ? "Due tomorrow"

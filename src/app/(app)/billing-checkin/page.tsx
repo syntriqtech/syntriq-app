@@ -402,7 +402,9 @@ export default function BillingCheckinPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${URGENCY_STYLE[tier]}`}>
-                          {days <= 0
+                          {days < 0
+                            ? `Due ${-days} day${-days === 1 ? "" : "s"} ago`
+                            : days === 0
                             ? "Due today"
                             : days === 1
                             ? "Due tomorrow"
