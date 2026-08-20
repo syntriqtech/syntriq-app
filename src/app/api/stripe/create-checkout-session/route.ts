@@ -37,6 +37,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: fetchOrgError.message }, { status: 500 });
   }
 
+  // Block a downgrade to Basic (2-member cap) before ever touching Stripe —
+  // supabase/055_member_seat_caps.sql enforces this same rule at the database
+  // level too, but that trigger only fires after Stripe has already been
+  // charged/changed. Checking here means a mismatch between Stripe and
+  // Supabase can't happen on this path at all.
+  if (plan === "basic") {
+    const { count: memberCount } = await supabase
+      .from("organization_members")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId);
+    if ((memberCount ?? 0) > 2) {
+      return NextResponse.json(
+        {
+          error: `Cannot switch to Basic: this organization has ${memberCount} team members, which is over Basic's limit of 2. Remove members down to 2 or fewer first.`,
+        },
+        { status: 400 }
+      );
+    }
+  }
+
   // Plan change on an already-live subscription (e.g. Basic -> Pro from the
   // upgrade prompt) — swap the existing subscription's price instead of
   // opening a new Checkout Session, which would create a SECOND concurrent
