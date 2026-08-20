@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUserContext } from "@/lib/currentUserContext";
+import { logActivity } from "@/lib/activityLogDb";
 
 export type PayAppPayment = {
   id: string;
@@ -64,7 +65,9 @@ export async function recordPayment(
     .select()
     .single();
   if (error) throw new Error(error.message);
-  return rowToPayAppPayment(data);
+  const recorded = rowToPayAppPayment(data);
+  logActivity("payment.recorded", "pay_app_payment", recorded.id, `$${amountPaid.toLocaleString()}`).catch(() => {});
+  return recorded;
 }
 
 export async function fetchPayAppPayments(payAppId: string): Promise<PayAppPayment[]> {

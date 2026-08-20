@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUserContext } from "@/lib/currentUserContext";
+import { logActivity } from "@/lib/activityLogDb";
 import { LienWaiverKind } from "@/lib/lienWaiverPdf";
 
 export type LienWaiver = {
@@ -79,7 +80,14 @@ export async function recordLienWaiverGenerated(params: {
     .select()
     .single();
   if (error) throw new Error(error.message);
-  return rowToLienWaiver(data);
+  const created = rowToLienWaiver(data);
+  logActivity(
+    "lien_waiver.generated",
+    "lien_waiver",
+    created.id,
+    `${params.kind.replace(/-/g, " ")} — Application #${params.applicationNumber}`
+  ).catch(() => {});
+  return created;
 }
 
 export async function fetchLienWaiversForApplication(

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUserContext } from "@/lib/currentUserContext";
+import { logActivity } from "@/lib/activityLogDb";
 import { JobSetup } from "@/lib/jobSetupData";
 
 export type DbJob = JobSetup & { id: string; archivedAt: string | null };
@@ -164,8 +165,16 @@ export async function restoreJob(id: string): Promise<DbJob> {
 
 export async function permanentlyDeleteJob(id: string): Promise<void> {
   const supabase = createClient();
+  // Fetched before deleting so the activity log entry stays meaningful —
+  // there's nothing left to join against once the row is gone.
+  const { data: existing } = await supabase.from("jobs").select("job_number, job_name").eq("id", id).single();
+
   const { error } = await supabase.from("jobs").delete().eq("id", id);
   if (error) throw new Error(error.message);
+
+  if (existing) {
+    logActivity("job.deleted", "job", id, `#${existing.job_number} — ${existing.job_name || "No name"}`).catch(() => {});
+  }
 }
 
 export async function createJob(job: JobSetup): Promise<DbJob> {
@@ -206,7 +215,9 @@ export async function createJob(job: JobSetup): Promise<DbJob> {
     .select()
     .single();
   if (error) throw new Error(error.message);
-  return rowToJob(data);
+  const created = rowToJob(data);
+  logActivity("job.created", "job", created.id, `#${created.jobNumber} — ${created.jobName || "No name"}`).catch(() => {});
+  return created;
 }
 
 export async function updateJobContractPdf(id: string, contractPdfUrl: string): Promise<void> {

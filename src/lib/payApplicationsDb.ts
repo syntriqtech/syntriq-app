@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUserContext } from "@/lib/currentUserContext";
+import { logActivity } from "@/lib/activityLogDb";
 import { autoMarkBillingThisMonthIfCurrent } from "@/lib/billingCheckinDb";
 
 export type PayApplicationStatus = "draft" | "submitted" | "revised" | "certified" | "paid";
@@ -96,6 +97,12 @@ export async function markApplicationBilled(
   // Check-in rather than making them answer it again separately.
   if (amountBilled > 0) {
     autoMarkBillingThisMonthIfCurrent(result.jobId, applicationDate).catch(() => {});
+    logActivity(
+      "pay_application.submitted",
+      "pay_application",
+      result.id,
+      `Application #${applicationNumber} — $${amountBilled.toLocaleString()}`
+    ).catch(() => {});
   }
   return result;
 }

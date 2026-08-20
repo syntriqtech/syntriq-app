@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUserContext } from "@/lib/currentUserContext";
+import { logActivity } from "@/lib/activityLogDb";
 
 export type CompanyProfile = {
   id: string;
@@ -211,6 +212,7 @@ export async function saveCompanyProfile(
       .single();
 
     if (error) throw new Error(error.message);
+    logActivity("company.setup_completed", "organization", organizationId, companyName).catch(() => {});
     return rowToCompanyProfile(data);
   }
 }

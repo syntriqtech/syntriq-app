@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { logActivity } from "@/lib/activityLogDb";
 
 export type MemberRole = "owner" | "project_manager" | "project_accountant";
 
@@ -51,15 +52,19 @@ export async function addOrganizationMember(
     p_role: role,
   });
   if (error) throw new Error(error.message);
+  logActivity("team_member.added", "organization_member", null, `${trimmed} — ${role.replace("_", " ")}`).catch(() => {});
 }
 
 // Relies entirely on RLS (organization_members_update_owner_only) plus the
 // self-demotion trigger for enforcement — the UI disables this on the
 // caller's own row proactively so that trigger's exception is a backstop,
-// not something a normal user ever hits.
+// not something a normal user ever hits. memberLabel is the display
+// name/email already available at the call site, passed through purely
+// for a readable activity log entry.
 export async function updateMemberRole(
   userId: string,
-  role: "project_manager" | "project_accountant"
+  role: "project_manager" | "project_accountant",
+  memberLabel: string
 ): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase
@@ -67,13 +72,17 @@ export async function updateMemberRole(
     .update({ role })
     .eq("user_id", userId);
   if (error) throw new Error(error.message);
+  logActivity("team_member.role_changed", "organization_member", userId, `${memberLabel} → ${role.replace("_", " ")}`).catch(
+    () => {}
+  );
 }
 
 // Same as above — RLS (organization_members_delete_owner_only) plus the
 // self-removal trigger are the real enforcement; the UI just disables this
 // on the caller's own row so that trigger is a backstop.
-export async function removeMember(userId: string): Promise<void> {
+export async function removeMember(userId: string, memberLabel: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.from("organization_members").delete().eq("user_id", userId);
   if (error) throw new Error(error.message);
+  logActivity("team_member.removed", "organization_member", userId, memberLabel).catch(() => {});
 }

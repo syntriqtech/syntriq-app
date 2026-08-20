@@ -103,7 +103,7 @@ export default function TeamUsersPage() {
     setRoleUpdatingId(member.userId);
     setError(null);
     try {
-      await updateMemberRole(member.userId, role);
+      await updateMemberRole(member.userId, role, member.fullName || member.email);
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update this team member's role.");
@@ -129,7 +129,7 @@ export default function TeamUsersPage() {
     setIsRemoving(true);
     setRemoveError(null);
     try {
-      await removeMember(removeTarget.userId);
+      await removeMember(removeTarget.userId, removeTarget.fullName || removeTarget.email);
       closeRemove();
       load();
     } catch (err) {

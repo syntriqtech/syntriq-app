@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUserContext } from "@/lib/currentUserContext";
+import { logActivity } from "@/lib/activityLogDb";
 import { autoMarkBillingThisMonthIfCurrent } from "@/lib/billingCheckinDb";
 
 export type RetentionReleaseStatus = "draft" | "billed" | "paid";
@@ -195,7 +196,14 @@ export async function createRetentionRelease(input: CreateReleaseInput): Promise
     .select()
     .single();
   if (error) throw new Error(error.message);
-  return rowToRelease(data);
+  const created = rowToRelease(data);
+  logActivity(
+    "retention_release.created",
+    "retention_release",
+    created.id,
+    `Release #${releaseNumber} — $${input.amountReleased.toLocaleString()}`
+  ).catch(() => {});
+  return created;
 }
 
 export async function recordRetentionPayment(
@@ -254,6 +262,12 @@ export async function recordRetentionPayment(
   // answer the check-in question until it's actually paid in full.
   if (fullyPaid) {
     autoMarkBillingThisMonthIfCurrent(result.jobId, paymentDate).catch(() => {});
+    logActivity(
+      "retention_release.paid",
+      "retention_release",
+      result.id,
+      `Release #${result.releaseNumber} — $${amountPaid.toLocaleString()}`
+    ).catch(() => {});
   }
   return result;
 }

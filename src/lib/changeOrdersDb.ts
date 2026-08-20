@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUserContext } from "@/lib/currentUserContext";
+import { logActivity } from "@/lib/activityLogDb";
 
 export type ChangeOrderStatus = "pending" | "submitted" | "approved" | "rejected" | "void";
 export type SovImpactType = "new_line_item" | "existing_line_item";
@@ -153,7 +154,14 @@ export async function createChangeOrder(input: CreateCoInput): Promise<ChangeOrd
     .select()
     .single();
   if (error) throw new Error(error.message);
-  return rowToCo(data);
+  const created = rowToCo(data);
+  logActivity(
+    "change_order.created",
+    "change_order",
+    created.id,
+    `${created.pcoNumber || created.coNumber || "CO"} — ${created.description}`
+  ).catch(() => {});
+  return created;
 }
 
 export type UpdateCoInput = {
@@ -228,7 +236,18 @@ export async function setChangeOrderStatus(
     .select()
     .single();
   if (error) throw new Error(error.message);
-  return rowToCo(data);
+  const updated = rowToCo(data);
+
+  if (status === "approved" || status === "rejected" || status === "void") {
+    logActivity(
+      "change_order.status_changed",
+      "change_order",
+      updated.id,
+      `${updated.pcoNumber || updated.coNumber || "CO"} → ${status}`
+    ).catch(() => {});
+  }
+
+  return updated;
 }
 
 export async function applyChangeOrder(id: string): Promise<void> {

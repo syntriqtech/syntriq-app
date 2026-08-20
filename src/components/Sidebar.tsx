@@ -34,6 +34,7 @@ const DEFAULT_NAV_ITEMS: NavItem[] = [
   { label: "Lien Waivers",       href: "/lien-waivers" },
   { label: "Download Package",   href: "/download-package" },
   { label: "Reports",            href: "/reports" },
+  { label: "Activity",           href: "/activity" },
 ];
 
 // ── Icons ────────────────────────────────────────────────────────────────────
