@@ -410,28 +410,6 @@ export default function ImportReviewPage() {
             onChange={(e) => handleChange("retentionRateSM", e.target.value)}
           />
           <TextField
-            label="Step-down threshold — % complete (not in file, optional)"
-            id="retentionStepdownThreshold"
-            type="number"
-            min="0"
-            max="100"
-            step="1"
-            placeholder="e.g. 50 — when job reaches this % complete, retention steps down"
-            value={form.retentionStepdownThreshold}
-            onChange={(e) => handleChange("retentionStepdownThreshold", e.target.value)}
-          />
-          <TextField
-            label="Step-down rate — completed work (%) (not in file, optional)"
-            id="retentionStepdownRateCW"
-            type="number"
-            min="0"
-            max="100"
-            step="0.01"
-            placeholder="e.g. 5 — reduced rate once threshold is met"
-            value={form.retentionStepdownRateCW}
-            onChange={(e) => handleChange("retentionStepdownRateCW", e.target.value)}
-          />
-          <TextField
             label="Project manager *"
             id="ctiPm"
             required
