@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { PLAN_LIMITS, Plan } from "@/lib/planLimits";
+import { ANNUAL_DISCOUNT_LABEL, BillingInterval, PLAN_ANNUAL_PRICING, PLAN_LIMITS, Plan } from "@/lib/planLimits";
 
 const PLAN_COPY: Record<Plan, { name: string; users: string; jobs: string }> = {
   basic: { name: "Basic", users: "1-2 users", jobs: "Up to 10 active jobs" },
@@ -10,6 +10,7 @@ const PLAN_COPY: Record<Plan, { name: string; users: string; jobs: string }> = {
 };
 
 export default function ChoosePlanPage() {
+  const [interval, setInterval] = useState<BillingInterval>("monthly");
   const [loadingPlan, setLoadingPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,7 +21,7 @@ export default function ChoosePlanPage() {
       const res = await fetch("/api/stripe/create-checkout-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan, interval }),
       });
       const data = await res.json();
       if (!res.ok || !data.url) throw new Error(data.error || "Could not start checkout.");
@@ -40,12 +41,39 @@ export default function ChoosePlanPage() {
           <p className="text-sm text-gray-500">30-day free trial on either plan — cancel anytime.</p>
         </div>
 
+        <div className="mt-6 flex justify-center">
+          <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
+            {(["monthly", "annual"] as BillingInterval[]).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setInterval(option)}
+                className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+                  interval === option ? "bg-navy text-white" : "text-gray-500 hover:text-navy"
+                }`}
+              >
+                {option === "monthly" ? "Monthly" : "Annual"}
+                {option === "annual" && (
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                      interval === "annual" ? "bg-white/20 text-white" : "bg-teal/15 text-teal"
+                    }`}
+                  >
+                    {ANNUAL_DISCOUNT_LABEL}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {error && <p className="mt-4 text-center text-sm text-red-600">{error}</p>}
 
         <div className="mt-8 grid gap-6 sm:grid-cols-2">
           {(Object.keys(PLAN_LIMITS) as Plan[]).map((plan) => {
             const limits = PLAN_LIMITS[plan];
             const copy = PLAN_COPY[plan];
+            const annual = PLAN_ANNUAL_PRICING[plan];
             return (
               <div
                 key={plan}
@@ -53,7 +81,12 @@ export default function ChoosePlanPage() {
               >
                 <div>
                   <h2 className="text-lg font-semibold text-navy">{copy.name}</h2>
-                  <p className="mt-1 text-2xl font-bold text-navy">{limits.priceLabel}</p>
+                  <p className="mt-1 text-2xl font-bold text-navy">
+                    {interval === "monthly" ? limits.priceLabel : annual.priceLabel}
+                  </p>
+                  {interval === "annual" && (
+                    <p className="mt-0.5 text-xs text-gray-400">{annual.monthlyEquivalentLabel} billed annually</p>
+                  )}
                 </div>
                 <ul className="flex flex-col gap-1.5 text-sm text-gray-600">
                   <li>{copy.users}</li>

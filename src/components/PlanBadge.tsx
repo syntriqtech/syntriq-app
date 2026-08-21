@@ -1,6 +1,6 @@
-import { Plan } from "@/lib/planLimits";
+import { BillingInterval, Plan } from "@/lib/planLimits";
 
-export default function PlanBadge({ plan }: { plan: Plan }) {
+export default function PlanBadge({ plan, interval }: { plan: Plan; interval?: BillingInterval | null }) {
   const isPro = plan === "pro";
   return (
     <span
@@ -9,6 +9,7 @@ export default function PlanBadge({ plan }: { plan: Plan }) {
       }`}
     >
       {isPro ? "Pro" : "Basic"}
+      {interval === "annual" ? " · Annual" : ""}
     </span>
   );
 }

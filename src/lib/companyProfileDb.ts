@@ -213,6 +213,14 @@ export async function saveCompanyProfile(
 
     if (error) throw new Error(error.message);
     logActivity("company.setup_completed", "organization", organizationId, companyName).catch(() => {});
+
+    // Turns a redeemed trial key (see src/app/api/trial/provision/route.ts)
+    // into real billing state on the org that just got created — a no-op
+    // if this account didn't sign up with one. Awaited so it happens
+    // before the caller navigates away, but never blocks company setup
+    // itself from succeeding if it fails for some reason.
+    await fetch("/api/trial/provision", { method: "POST" }).catch(() => {});
+
     return rowToCompanyProfile(data);
   }
 }

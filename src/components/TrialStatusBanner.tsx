@@ -5,7 +5,7 @@ import { useTrialStatus } from "@/hooks/useTrialStatus";
 export default function TrialStatusBanner() {
   const status = useTrialStatus();
 
-  if (!status || status.keyType !== "trial" || status.daysRemaining === null) return null;
+  if (!status || !status.isTrialing || status.daysRemaining === null) return null;
 
   const days = status.daysRemaining;
   const label =

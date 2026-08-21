@@ -22,7 +22,7 @@ export default function AccountMenu() {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [user, setUser] = useState(sampleUser);
-  const { plan } = usePlan();
+  const { plan, interval } = usePlan();
 
   useEffect(() => {
     getContractorInfo().then(setUser).catch(() => {});
@@ -119,7 +119,7 @@ export default function AccountMenu() {
             <div className="truncate text-[13.5px] font-bold leading-tight text-navy">
               {user.name.split(" ")[0]}
             </div>
-            {plan && <PlanBadge plan={plan} />}
+            {plan && <PlanBadge plan={plan} interval={interval} />}
           </div>
           <div className="truncate text-[11.5px] text-gray-500">
             {user.company}

@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUserContext } from "@/lib/currentUserContext";
 import { resolveEffectivePlan } from "@/lib/orgPlan";
-import { Plan } from "@/lib/planLimits";
+import { BillingInterval, Plan } from "@/lib/planLimits";
 
-export function usePlan(): { plan: Plan | null; isLoading: boolean } {
+export function usePlan(): { plan: Plan | null; interval: BillingInterval | null; isLoading: boolean } {
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [billingInterval, setBillingInterval] = useState<BillingInterval | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -19,11 +20,12 @@ export function usePlan(): { plan: Plan | null; isLoading: boolean } {
         const supabase = createClient();
         const { data: org } = await supabase
           .from("organizations")
-          .select("plan, subscription_status")
+          .select("plan, subscription_status, billing_interval")
           .eq("id", ctx.organizationId)
           .single();
         if (!cancelled && org) {
           setPlan(resolveEffectivePlan(org.plan, org.subscription_status));
+          setBillingInterval(org.billing_interval);
         }
       })
       .catch(() => {})
@@ -36,5 +38,5 @@ export function usePlan(): { plan: Plan | null; isLoading: boolean } {
     };
   }, []);
 
-  return { plan, isLoading };
+  return { plan, interval: billingInterval, isLoading };
 }
