@@ -4,9 +4,30 @@ import { useState } from "react";
 import Image from "next/image";
 import { ANNUAL_DISCOUNT_LABEL, BillingInterval, PLAN_ANNUAL_PRICING, PLAN_LIMITS, Plan } from "@/lib/planLimits";
 
-const PLAN_COPY: Record<Plan, { name: string; users: string; jobs: string }> = {
-  basic: { name: "Basic", users: "1-2 users", jobs: "Up to 10 active jobs" },
-  pro: { name: "Pro", users: "1-6 users", jobs: "Unlimited jobs" },
+const PLAN_COPY: Record<Plan, { name: string }> = {
+  basic: { name: "Basic" },
+  pro: { name: "Pro" },
+};
+
+// Everything not listed here (pay apps, lien waivers, billing check-in, AR
+// aging, retention tracking, etc.) is identical on both plans — the real
+// differences are the seat/job caps and AI import, so those are the only
+// rows worth calling out.
+const PLAN_FEATURES: Record<Plan, { label: string; value: string }[]> = {
+  basic: [
+    { label: "Team members", value: "Up to 2" },
+    { label: "Active jobs", value: "Up to 10" },
+    { label: "Pay apps & lien waivers", value: "Included" },
+    { label: "Billing check-in & AR tracking", value: "Included" },
+    { label: "AI contract & change order import", value: "Not included" },
+  ],
+  pro: [
+    { label: "Team members", value: "Up to 6" },
+    { label: "Active jobs", value: "Unlimited" },
+    { label: "Pay apps & lien waivers", value: "Included" },
+    { label: "Billing check-in & AR tracking", value: "Included" },
+    { label: "AI contract & change order import", value: "Included" },
+  ],
 };
 
 export default function ChoosePlanPage() {
@@ -90,9 +111,19 @@ export default function ChoosePlanPage() {
                     </p>
                   )}
                 </div>
-                <ul className="flex flex-col gap-1.5 text-sm text-gray-600">
-                  <li>{copy.users}</li>
-                  <li>{copy.jobs}</li>
+                <ul className="flex flex-col divide-y divide-gray-100 border-t border-gray-100">
+                  {PLAN_FEATURES[plan].map((feature) => (
+                    <li key={feature.label} className="flex items-center justify-between gap-4 py-2.5">
+                      <span className="text-sm text-gray-500">{feature.label}</span>
+                      <span
+                        className={`text-sm font-medium ${
+                          feature.value === "Not included" ? "text-gray-400" : "text-navy"
+                        }`}
+                      >
+                        {feature.value}
+                      </span>
+                    </li>
+                  ))}
                 </ul>
                 <button
                   type="button"
