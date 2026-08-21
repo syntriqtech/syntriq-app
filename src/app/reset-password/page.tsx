@@ -22,27 +22,49 @@ export default function ResetPasswordPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    // The reset-password email link carries a recovery session that the
-    // Supabase client resolves from the URL on load. There's a brief window
-    // before that finishes, so check the current session AND listen for the
-    // PASSWORD_RECOVERY event in case it resolves after this effect runs.
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
+    let cancelled = false;
+
+    // createBrowserClient defaults to the PKCE flow, so the recovery email
+    // links here to /reset-password?code=... rather than a #access_token
+    // hash fragment (confirmed against an actual sent email) — that code
+    // has to be explicitly exchanged for a session, or it just sits in the
+    // URL unprocessed and this page always falls through to "invalid or
+    // expired" a few seconds later, even on a link that's perfectly valid.
+    async function resolveSession() {
+      const code = new URLSearchParams(window.location.search).get("code");
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (!cancelled && !error) {
+          setLinkValid(true);
+          setIsCheckingLink(false);
+          return;
+        }
+      }
+
+      const { data } = await supabase.auth.getSession();
+      if (!cancelled && data.session) {
         setLinkValid(true);
         setIsCheckingLink(false);
       }
-    });
+    }
 
+    resolveSession();
+
+    // Fallback for the implicit/hash-token flow, in case flowType is ever
+    // changed back — PASSWORD_RECOVERY fires once Supabase resolves it.
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && session)) {
+      if (!cancelled && (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && session))) {
         setLinkValid(true);
         setIsCheckingLink(false);
       }
     });
 
-    const timeout = setTimeout(() => setIsCheckingLink(false), 3000);
+    const timeout = setTimeout(() => {
+      if (!cancelled) setIsCheckingLink(false);
+    }, 3000);
 
     return () => {
+      cancelled = true;
       listener.subscription.unsubscribe();
       clearTimeout(timeout);
     };
