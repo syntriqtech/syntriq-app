@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AccountMenu from "@/components/AccountMenu";
 import TrialStatusBanner from "@/components/TrialStatusBanner";
 import { useCoExposure } from "@/hooks/useCoExposure";
@@ -75,6 +75,25 @@ function EyeOffIcon() {
   );
 }
 
+function MenuIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
 // ── Sidebar ──────────────────────────────────────────────────────────────────
 
 export default function Sidebar() {
@@ -88,6 +107,12 @@ export default function Sidebar() {
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const dragCounter = useRef(0); // tracks nested dragenter/dragleave
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Close the slide-over menu whenever the user navigates to a new page.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   // Apply saved order on top of the canonical DEFAULT_NAV_ITEMS list.
   // Any new items added to DEFAULT_NAV_ITEMS that aren't in the saved order
@@ -167,12 +192,54 @@ export default function Sidebar() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <aside className="sticky top-0 flex h-screen w-56 flex-none flex-col border-r border-gray-100 bg-white px-4 py-6">
-      {/* Logo */}
-      <div className="flex items-center gap-2 px-2">
-        <Image src="/SyntriqLogo2.png" alt="Syntriq" width={32} height={32} />
-        <span className="text-lg font-semibold text-navy">Syntriq</span>
+    <>
+      {/* Mobile / tablet top bar — hidden on large screens */}
+      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3 lg:hidden">
+        <div className="flex items-center gap-2">
+          <Image src="/SyntriqLogo2.png" alt="Syntriq" width={28} height={28} />
+          <span className="text-base font-semibold text-navy">Syntriq</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open menu"
+          className="flex-none rounded-lg p-2 text-gray-500 hover:bg-gray-50"
+        >
+          <MenuIcon />
+        </button>
       </div>
+
+      {/* Backdrop behind the slide-over menu on mobile / tablet */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/30 lg:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={[
+          "fixed inset-y-0 left-0 z-50 flex h-screen w-64 flex-none flex-col overflow-y-auto border-r border-gray-100 bg-white px-4 py-6 transition-transform duration-200 ease-out",
+          mobileOpen ? "translate-x-0" : "-translate-x-full",
+          "lg:sticky lg:top-0 lg:z-auto lg:w-56 lg:translate-x-0 lg:transition-none",
+        ].join(" ")}
+      >
+        {/* Logo */}
+        <div className="flex items-center justify-between gap-2 px-2">
+          <div className="flex items-center gap-2">
+            <Image src="/SyntriqLogo2.png" alt="Syntriq" width={32} height={32} />
+            <span className="text-lg font-semibold text-navy">Syntriq</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Close menu"
+            className="flex-none rounded-lg p-1.5 text-gray-400 hover:bg-gray-50 hover:text-gray-600 lg:hidden"
+          >
+            <CloseIcon />
+          </button>
+        </div>
 
       {/* Nav items */}
       <nav className="mt-8 flex flex-1 flex-col gap-0.5 overflow-y-auto">
@@ -285,6 +352,7 @@ export default function Sidebar() {
 
       <TrialStatusBanner />
       <AccountMenu />
-    </aside>
+      </aside>
+    </>
   );
 }
