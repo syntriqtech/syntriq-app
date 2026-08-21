@@ -82,10 +82,12 @@ export default function ChoosePlanPage() {
                 <div>
                   <h2 className="text-lg font-semibold text-navy">{copy.name}</h2>
                   <p className="mt-1 text-2xl font-bold text-navy">
-                    {interval === "monthly" ? limits.priceLabel : annual.priceLabel}
+                    {interval === "monthly" ? limits.priceLabel : `${annual.monthlyEquivalentLabel}`}
                   </p>
                   {interval === "annual" && (
-                    <p className="mt-0.5 text-xs text-gray-400">{annual.monthlyEquivalentLabel} billed annually</p>
+                    <p className="mt-0.5 text-xs text-gray-400">
+                      {annual.priceLabel.replace("/yr", "")} billed annually
+                    </p>
                   )}
                 </div>
                 <ul className="flex flex-col gap-1.5 text-sm text-gray-600">
