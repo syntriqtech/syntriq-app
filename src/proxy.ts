@@ -30,6 +30,7 @@ export async function proxy(request: NextRequest) {
   const isResetPasswordPage = pathname === "/reset-password";
   const isApiRoute = pathname.startsWith("/api/");
   const isStripeApiRoute = pathname.startsWith("/api/stripe/");
+  const isTrialProvisionRoute = pathname === "/api/trial/provision";
 
   // Password-recovery links land here without a session cookie yet — the
   // client-side Supabase JS still needs to process the URL (hash tokens or
@@ -76,9 +77,20 @@ export async function proxy(request: NextRequest) {
   // nobody could ever start checkout in the first place. The webhook route
   // is separately exempt in effect: Stripe calls it directly with no user
   // session, so `user` is null and this whole block is skipped for it.
+  // /api/trial/provision needs the same exemption for the same reason —
+  // it's the route that GIVES a brand-new org its trial subscription, so
+  // by definition it has to run before has_active_subscription() would
+  // pass (found live: this was 403ing on every real signup until fixed).
   // Other API routes get a 403 instead of a redirect, same reasoning as
   // the gate above.
-  if (user && !isCompanySetupPage && !isChoosePlanPage && !isResetPasswordPage && !isStripeApiRoute) {
+  if (
+    user &&
+    !isCompanySetupPage &&
+    !isChoosePlanPage &&
+    !isResetPasswordPage &&
+    !isStripeApiRoute &&
+    !isTrialProvisionRoute
+  ) {
     const { data: hasSubscription } = await supabase.rpc("has_active_subscription");
     if (!hasSubscription) {
       if (isApiRoute) {
