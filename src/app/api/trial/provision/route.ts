@@ -2,6 +2,23 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/serviceRole";
 import { stripe } from "@/lib/stripe";
+import { Plan, BillingInterval } from "@/lib/planLimits";
+
+// Same price map as src/app/api/stripe/create-checkout-session/route.ts —
+// duplicated rather than imported from there since that route's map is a
+// local const, not an exported one, and the two call sites have different
+// enough surrounding logic (one-time subscription create vs. ongoing
+// plan-change) that sharing more than the map itself isn't a clean fit.
+const PRICE_IDS: Record<Plan, Record<BillingInterval, string>> = {
+  basic: {
+    monthly: process.env.STRIPE_PRICE_BASIC!,
+    annual: process.env.STRIPE_PRICE_BASIC_ANNUAL!,
+  },
+  pro: {
+    monthly: process.env.STRIPE_PRICE_PRO!,
+    annual: process.env.STRIPE_PRICE_PRO_ANNUAL!,
+  },
+};
 
 // Called once, right after bootstrap_organization() creates a brand-new
 // org (see src/lib/companyProfileDb.ts) — redeem_activation_key() itself
@@ -43,7 +60,7 @@ export async function POST() {
 
   const { data: key } = await serviceRoleSupabase
     .from("activation_keys")
-    .select("requires_payment_method, stripe_customer_id, redeemed_at, expires_at")
+    .select("requires_payment_method, stripe_customer_id, redeemed_at, expires_at, plan, billing_interval")
     .eq("used_by", user.id)
     .eq("key_type", "trial")
     .order("redeemed_at", { ascending: false })
@@ -56,6 +73,12 @@ export async function POST() {
     return NextResponse.json({ ok: true, provisioned: false });
   }
 
+  // supabase/058 defaults both columns to 'pro'/'monthly', so this also
+  // covers every key issued before that migration (Path 1 keys are always
+  // Pro monthly anyway).
+  const plan = key.plan as Plan;
+  const billingInterval = key.billing_interval as BillingInterval;
+
   if (!key.requires_payment_method) {
     // Path 1 (word-of-mouth): no payment method was ever collected, so
     // there's no Stripe object to create — just a plain trial term. Its
@@ -64,8 +87,8 @@ export async function POST() {
     await serviceRoleSupabase
       .from("organizations")
       .update({
-        plan: "pro",
-        billing_interval: "monthly",
+        plan,
+        billing_interval: billingInterval,
         subscription_status: "trialing",
         current_term_start: key.redeemed_at,
         current_period_end: key.expires_at,
@@ -88,7 +111,7 @@ export async function POST() {
 
   const subscription = await stripe.subscriptions.create({
     customer: key.stripe_customer_id,
-    items: [{ price: process.env.STRIPE_PRICE_PRO! }],
+    items: [{ price: PRICE_IDS[plan][billingInterval] }],
     trial_period_days: 30,
     metadata: { organization_id: organizationId, source: "trial_path_2" },
   });
@@ -96,8 +119,8 @@ export async function POST() {
   await serviceRoleSupabase
     .from("organizations")
     .update({
-      plan: "pro",
-      billing_interval: "monthly",
+      plan,
+      billing_interval: billingInterval,
       subscription_status: subscription.status,
       stripe_customer_id: key.stripe_customer_id,
       stripe_subscription_id: subscription.id,
