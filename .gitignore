@@ -45,3 +45,8 @@ next-env.d.ts
 /*.docx
 /*.png
 /*.svg
+
+# claude code local state
+/.agents/
+/.claude/
+/skills-lock.json
