@@ -129,9 +129,11 @@ begin
   -- Resend path: an existing pending invite to this org+email wins over
   -- creating a duplicate. Doesn't need a fresh cap check — it doesn't add a
   -- new pending row, so the org's pending count is unchanged.
-  select id, token into v_existing_id, v_existing_token
-  from invitations
-  where organization_id = v_org_id and lower(email) = v_normalized and status = 'pending';
+  -- Table-qualified: bare "token" would be ambiguous against this
+  -- function's own "token" OUT parameter (returns table(..., token text, ...)).
+  select i.id, i.token into v_existing_id, v_existing_token
+  from invitations i
+  where i.organization_id = v_org_id and lower(i.email) = v_normalized and i.status = 'pending';
 
   if v_existing_id is not null then
     update invitations
