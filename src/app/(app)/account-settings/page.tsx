@@ -9,6 +9,8 @@ import { createClient } from "@/lib/supabase/client";
 export default function AccountSettingsPage() {
   const [fullName, setFullName]   = useState("");
   const [roleTitle, setRoleTitle] = useState("");
+  const [email, setEmail]         = useState("");
+  const [phone, setPhone]         = useState("");
   const [authEmail, setAuthEmail] = useState("");
 
   const [isLoading, setIsLoading]     = useState(true);
@@ -27,6 +29,8 @@ export default function AccountSettingsPage() {
         if (profile) {
           setFullName(profile.fullName);
           setRoleTitle(profile.roleTitle);
+          setEmail(profile.email);
+          setPhone(profile.phone);
         } else if (userData.user?.user_metadata?.full_name) {
           setFullName(userData.user.user_metadata.full_name);
         }
@@ -45,7 +49,7 @@ export default function AccountSettingsPage() {
     setSaveSuccess(false);
     setIsSaving(true);
     try {
-      await saveUserProfile(fullName.trim(), roleTitle.trim());
+      await saveUserProfile(fullName.trim(), roleTitle.trim(), email.trim(), phone.trim());
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
@@ -92,6 +96,24 @@ export default function AccountSettingsPage() {
               placeholder="e.g. Project Manager, Owner, Estimator"
               value={roleTitle}
               onChange={(e) => setRoleTitle(e.target.value)}
+            />
+
+            <TextField
+              id="contactEmail"
+              label="Contact email (optional)"
+              type="email"
+              placeholder="e.g. jane@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+
+            <TextField
+              id="contactPhone"
+              label="Phone (optional)"
+              type="tel"
+              placeholder="e.g. (555) 123-4567"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
             />
 
             <p className="text-xs text-gray-400">
