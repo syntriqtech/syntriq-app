@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { fetchCompanyProfile } from "@/lib/companyProfileDb";
 
 const DEFAULT_USER = {
   name: "Jane Doe",
@@ -10,26 +10,22 @@ const DEFAULT_USER = {
 
 export const sampleUser = DEFAULT_USER;
 
+// Delegates to fetchCompanyProfile() (org-scoped, supabase/060) rather than
+// querying company_profile directly — this used to run its own per-user
+// query here, which is exactly the bug that made a teammate with no
+// personal profile row silently fall back to this placeholder instead of
+// the company's real, shared profile.
 export async function getContractorInfo() {
   try {
-    const supabase = createClient();
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData.user?.id) return DEFAULT_USER;
-
-    const { data, error } = await supabase
-      .from("company_profile")
-      .select("*")
-      .eq("user_id", userData.user.id)
-      .single();
-
-    if (error || !data) return DEFAULT_USER;
+    const profile = await fetchCompanyProfile();
+    if (!profile) return DEFAULT_USER;
 
     return {
-      name: data.contact_name,
-      email: data.contact_email,
-      company: data.company_name,
-      companyAddress: data.company_address,
-      initials: data.contact_name
+      name: profile.contactName,
+      email: profile.contactEmail,
+      company: profile.companyName,
+      companyAddress: profile.companyAddress,
+      initials: profile.contactName
         .split(" ")
         .map((word: string) => word[0])
         .join("")

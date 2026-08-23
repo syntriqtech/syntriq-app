@@ -4,6 +4,7 @@ import { logActivity } from "@/lib/activityLogDb";
 
 export type CompanyProfile = {
   id: string;
+  organizationId: string;
   companyName: string;
   companyAddress: string; // composed from parts — used by PDFs
   streetAddress: string;
@@ -22,7 +23,7 @@ export type CompanyProfile = {
 
 type CompanyProfileRow = {
   id: string;
-  user_id: string;
+  organization_id: string;
   company_name: string;
   company_address: string;
   company_street: string;
@@ -59,6 +60,7 @@ function rowToCompanyProfile(row: CompanyProfileRow): CompanyProfile {
 
   return {
     id: row.id,
+    organizationId: row.organization_id,
     companyName: row.company_name,
     companyAddress,
     streetAddress,
@@ -78,38 +80,35 @@ function rowToCompanyProfile(row: CompanyProfileRow): CompanyProfile {
 
 const LOGO_BUCKET = "company-logos";
 
+// One row per organization (supabase/060) — every member can read it,
+// but only the owner can write it (enforced by RLS; the page itself also
+// locks the form for non-owners so this is a backstop, not the only gate).
 export async function fetchCompanyProfile(): Promise<CompanyProfile | null> {
   const supabase = createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("Not signed in.");
+  const { organizationId } = await getCurrentUserContext();
+  if (!organizationId) return null;
 
   const { data, error } = await supabase
     .from("company_profile")
     .select("*")
-    .eq("user_id", userId)
-    .single();
+    .eq("organization_id", organizationId)
+    .maybeSingle();
 
-  if (error && error.code !== "PGRST116") throw new Error(error.message);
+  if (error) throw new Error(error.message);
   return data ? rowToCompanyProfile(data) : null;
 }
 
 export async function saveCompanyLogo(file: File): Promise<string> {
   const supabase = createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("Not signed in.");
-
   const existing = await fetchCompanyProfile();
   if (!existing) throw new Error("Save your company profile before uploading a logo.");
+  const organizationId = existing.organizationId;
 
   // Remove any previous logo (both extensions) so switching PNG↔JPG doesn't leave orphans
-  await supabase.storage.from(LOGO_BUCKET).remove([`${userId}/logo.png`, `${userId}/logo.jpg`]);
+  await supabase.storage.from(LOGO_BUCKET).remove([`${organizationId}/logo.png`, `${organizationId}/logo.jpg`]);
 
   const ext = file.type.includes("png") ? "png" : "jpg";
-  const path = `${userId}/logo.${ext}`;
+  const path = `${organizationId}/logo.${ext}`;
   const buffer = await file.arrayBuffer();
 
   const { error: uploadError } = await supabase.storage
@@ -123,7 +122,7 @@ export async function saveCompanyLogo(file: File): Promise<string> {
   const { error: updateError } = await supabase
     .from("company_profile")
     .update({ logo_url: logoUrl, updated_at: new Date().toISOString() })
-    .eq("user_id", userId);
+    .eq("organization_id", organizationId);
   if (updateError) throw new Error(updateError.message);
 
   return logoUrl;
@@ -131,18 +130,17 @@ export async function saveCompanyLogo(file: File): Promise<string> {
 
 export async function removeCompanyLogo(): Promise<void> {
   const supabase = createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("Not signed in.");
+  const existing = await fetchCompanyProfile();
+  if (!existing) throw new Error("Save your company profile before removing a logo.");
+  const organizationId = existing.organizationId;
 
   const { error: updateError } = await supabase
     .from("company_profile")
     .update({ logo_url: null, updated_at: new Date().toISOString() })
-    .eq("user_id", userId);
+    .eq("organization_id", organizationId);
   if (updateError) throw new Error(updateError.message);
 
-  await supabase.storage.from(LOGO_BUCKET).remove([`${userId}/logo.png`, `${userId}/logo.jpg`]);
+  await supabase.storage.from(LOGO_BUCKET).remove([`${organizationId}/logo.png`, `${organizationId}/logo.jpg`]);
 }
 
 export async function saveCompanyProfile(
@@ -185,10 +183,14 @@ export async function saveCompanyProfile(
   const existing = await fetchCompanyProfile();
 
   if (existing) {
+    // RLS (company_profile_update_owner_only, supabase/060) rejects this
+    // for anyone but the org owner — the settings page itself locks the
+    // form for non-owners, so hitting that RLS error here would mean the
+    // UI guard was bypassed, not a normal user flow.
     const { data, error } = await supabase
       .from("company_profile")
       .update(payload)
-      .eq("user_id", userId)
+      .eq("organization_id", existing.organizationId)
       .select()
       .single();
 

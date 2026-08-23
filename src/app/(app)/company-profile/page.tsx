@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useCompanyProfile } from "@/hooks/useCompanyProfile";
 import { saveCompanyProfile, saveCompanyLogo, removeCompanyLogo } from "@/lib/companyProfileDb";
+import { getCurrentUserContext } from "@/lib/currentUserContext";
+import { fetchOrganizationMembers } from "@/lib/organizationMembersDb";
 import TextField from "@/components/TextField";
 import Button from "@/components/Button";
 
@@ -14,6 +16,24 @@ export default function CompanyProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Company identity data is shared across the whole org (supabase/060) —
+  // only the owner can edit it, everyone else sees it locked read-only.
+  // Defaults to false (fail closed) so nobody sees a briefly-editable form
+  // before the role check below resolves — a real owner just sees a
+  // fraction-of-a-second locked state instead, which is harmless.
+  const [isOwner, setIsOwner] = useState(false);
+  const [isCheckingRole, setIsCheckingRole] = useState(true);
+
+  useEffect(() => {
+    Promise.all([getCurrentUserContext(), fetchOrganizationMembers()])
+      .then(([ctx, members]) => {
+        const me = members.find((m) => m.userId === ctx.userId);
+        setIsOwner(me?.role === "owner");
+      })
+      .catch(() => {})
+      .finally(() => setIsCheckingRole(false));
+  }, []);
 
   const [companyName, setCompanyName] = useState("");
   const [streetAddress, setStreetAddress] = useState("");
@@ -49,6 +69,10 @@ export default function CompanyProfilePage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    // Guards against Enter-key form submission in a readOnly field — the
+    // Save button is already hidden for non-owners, RLS blocks the write
+    // regardless, but no reason to round-trip for a guaranteed error.
+    if (!isOwner) return;
     setSaveError(null);
     setSaveSuccess(false);
     setIsSaving(true);
@@ -101,7 +125,7 @@ export default function CompanyProfilePage() {
     }
   }
 
-  if (isLoading) {
+  if (isLoading || isCheckingRole) {
     return (
       <div className="flex flex-col gap-4">
         <h1 className="text-2xl font-bold text-navy">Company Profile</h1>
@@ -117,6 +141,11 @@ export default function CompanyProfilePage() {
         <p className="mt-1 text-sm text-gray-500">
           Your company information is used on all generated documents (pay applications, lien waivers, etc.).
         </p>
+        {!isOwner && (
+          <p className="mt-2 text-sm text-amber-600">
+            Only the account owner can edit company information. You can view it here.
+          </p>
+        )}
       </div>
 
       {loadError && <p className="text-sm text-red-600">{loadError}</p>}
@@ -128,6 +157,7 @@ export default function CompanyProfilePage() {
             label="Company name"
             id="companyName"
             required
+            readOnly={!isOwner}
             value={companyName}
             onChange={(e) => setCompanyName(e.target.value)}
             placeholder="e.g., Legacy Construction"
@@ -136,6 +166,7 @@ export default function CompanyProfilePage() {
             label="Contact name"
             id="contactName"
             required
+            readOnly={!isOwner}
             value={contactName}
             onChange={(e) => setContactName(e.target.value)}
             placeholder="e.g., Jane Doe"
@@ -144,6 +175,7 @@ export default function CompanyProfilePage() {
             <TextField
               label="Street address"
               id="streetAddress"
+              readOnly={!isOwner}
               value={streetAddress}
               onChange={(e) => setStreetAddress(e.target.value)}
               placeholder="e.g., 4820 Harbor Industrial Way"
@@ -152,6 +184,7 @@ export default function CompanyProfilePage() {
           <TextField
             label="City"
             id="city"
+            readOnly={!isOwner}
             value={city}
             onChange={(e) => setCity(e.target.value)}
             placeholder="e.g., Long Beach"
@@ -160,6 +193,7 @@ export default function CompanyProfilePage() {
             <TextField
               label="State"
               id="stateField"
+              readOnly={!isOwner}
               value={stateField}
               onChange={(e) => setStateField(e.target.value)}
               placeholder="e.g., CA"
@@ -167,6 +201,7 @@ export default function CompanyProfilePage() {
             <TextField
               label="ZIP code"
               id="zipCode"
+              readOnly={!isOwner}
               value={zipCode}
               onChange={(e) => setZipCode(e.target.value)}
               placeholder="e.g., 90802"
@@ -175,6 +210,7 @@ export default function CompanyProfilePage() {
           <TextField
             label="Country"
             id="country"
+            readOnly={!isOwner}
             value={country}
             onChange={(e) => setCountry(e.target.value)}
             placeholder="e.g., USA"
@@ -184,6 +220,7 @@ export default function CompanyProfilePage() {
             id="contactEmail"
             type="email"
             required
+            readOnly={!isOwner}
             value={contactEmail}
             onChange={(e) => setContactEmail(e.target.value)}
             placeholder="e.g., jason@company.com"
@@ -192,6 +229,7 @@ export default function CompanyProfilePage() {
             label="Phone (optional)"
             id="contactPhone"
             type="tel"
+            readOnly={!isOwner}
             value={contactPhone}
             onChange={(e) => setContactPhone(e.target.value)}
             placeholder="e.g., (555) 123-4567"
@@ -201,11 +239,13 @@ export default function CompanyProfilePage() {
         {saveError && <p className="mt-3 text-sm text-red-600">{saveError}</p>}
         {saveSuccess && <p className="mt-3 text-sm text-green-600">Company profile saved successfully.</p>}
 
-        <div className="mt-6">
-          <Button type="submit" disabled={isSaving} className="w-auto px-6">
-            {isSaving ? "Saving…" : "Save Company Profile"}
-          </Button>
-        </div>
+        {isOwner && (
+          <div className="mt-6">
+            <Button type="submit" disabled={isSaving} className="w-auto px-6">
+              {isSaving ? "Saving…" : "Save Company Profile"}
+            </Button>
+          </div>
+        )}
       </form>
 
       {/* Logo section */}
@@ -231,45 +271,47 @@ export default function CompanyProfilePage() {
           </div>
 
           {/* Actions */}
-          <div className="flex flex-col gap-2">
-            <input
-              ref={logoInputRef}
-              type="file"
-              accept="image/png,image/jpeg"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleLogoFile(file);
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => {
-                if (!profile) {
-                  setLogoError("Save your company profile first before uploading a logo.");
-                  return;
-                }
-                logoInputRef.current?.click();
-              }}
-              disabled={isUploadingLogo || isRemovingLogo}
-              className="rounded-lg border border-teal px-4 py-2 text-sm font-semibold text-teal hover:bg-teal/10 disabled:opacity-50"
-            >
-              {isUploadingLogo ? "Uploading…" : logoUrl ? "Replace Logo" : "Upload Logo"}
-            </button>
-            {logoUrl && (
+          {isOwner && (
+            <div className="flex flex-col gap-2">
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleLogoFile(file);
+                }}
+              />
               <button
                 type="button"
-                onClick={handleRemoveLogo}
+                onClick={() => {
+                  if (!profile) {
+                    setLogoError("Save your company profile first before uploading a logo.");
+                    return;
+                  }
+                  logoInputRef.current?.click();
+                }}
                 disabled={isUploadingLogo || isRemovingLogo}
-                className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                className="rounded-lg border border-teal px-4 py-2 text-sm font-semibold text-teal hover:bg-teal/10 disabled:opacity-50"
               >
-                {isRemovingLogo ? "Removing…" : "Remove Logo"}
+                {isUploadingLogo ? "Uploading…" : logoUrl ? "Replace Logo" : "Upload Logo"}
               </button>
-            )}
-            <p className="text-xs text-gray-400">
-              The preview shows how your logo will be scaled on invoices.
-            </p>
-          </div>
+              {logoUrl && (
+                <button
+                  type="button"
+                  onClick={handleRemoveLogo}
+                  disabled={isUploadingLogo || isRemovingLogo}
+                  className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                >
+                  {isRemovingLogo ? "Removing…" : "Remove Logo"}
+                </button>
+              )}
+              <p className="text-xs text-gray-400">
+                The preview shows how your logo will be scaled on invoices.
+              </p>
+            </div>
+          )}
         </div>
 
         {logoError && <p className="mt-3 text-sm text-red-600">{logoError}</p>}
