@@ -36,25 +36,6 @@ export async function fetchOrganizationMembers(): Promise<OrganizationMember[]> 
   return (data ?? []).map(rowToMember);
 }
 
-// project_manager/project_accountant only — promoting someone to co-owner
-// isn't exposed in this UI (see add_organization_member(), which also
-// enforces this server-side).
-export async function addOrganizationMember(
-  email: string,
-  role: "project_manager" | "project_accountant"
-): Promise<void> {
-  const trimmed = email.trim();
-  if (!trimmed) throw new Error("Email is required.");
-
-  const supabase = createClient();
-  const { error } = await supabase.rpc("add_organization_member", {
-    p_email: trimmed,
-    p_role: role,
-  });
-  if (error) throw new Error(error.message);
-  logActivity("team_member.added", "organization_member", null, `${trimmed} — ${role.replace("_", " ")}`).catch(() => {});
-}
-
 // Relies entirely on RLS (organization_members_update_owner_only) plus the
 // self-demotion trigger for enforcement — the UI disables this on the
 // caller's own row proactively so that trigger's exception is a backstop,

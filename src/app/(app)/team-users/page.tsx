@@ -5,10 +5,17 @@ import {
   OrganizationMember,
   MemberRole,
   fetchOrganizationMembers,
-  addOrganizationMember,
   updateMemberRole,
   removeMember,
 } from "@/lib/organizationMembersDb";
+import {
+  PendingInvitation,
+  InvitationRole,
+  fetchPendingInvitations,
+  createInvitation,
+  resendInvitation,
+  revokeInvitation,
+} from "@/lib/invitationsDb";
 import { getCurrentUserContext } from "@/lib/currentUserContext";
 import TextField from "@/components/TextField";
 import Button from "@/components/Button";
@@ -26,12 +33,13 @@ const ASSIGNABLE_ROLES: { value: "project_manager" | "project_accountant"; label
   { value: "project_accountant", label: "Project Accountant" },
 ];
 
-type AddFormState = { email: string; role: "project_manager" | "project_accountant" };
+type AddFormState = { email: string; role: InvitationRole };
 
 const EMPTY_ADD_FORM: AddFormState = { email: "", role: "project_manager" };
 
 export default function TeamUsersPage() {
   const [members, setMembers] = useState<OrganizationMember[]>([]);
+  const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [hasOrganization, setHasOrganization] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -47,15 +55,19 @@ export default function TeamUsersPage() {
   const [removeError, setRemoveError] = useState<string | null>(null);
 
   const [roleUpdatingId, setRoleUpdatingId] = useState<string | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [inviteRowError, setInviteRowError] = useState<string | null>(null);
 
   function load() {
     setIsLoading(true);
     setError(null);
-    Promise.all([fetchOrganizationMembers(), getCurrentUserContext()])
-      .then(([memberData, ctx]) => {
+    Promise.all([fetchOrganizationMembers(), getCurrentUserContext(), fetchPendingInvitations()])
+      .then(([memberData, ctx, invitationData]) => {
         setMembers(memberData);
         setMyUserId(ctx.userId);
         setHasOrganization(ctx.organizationId !== null);
+        setInvitations(invitationData);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Could not load your team."))
       .finally(() => setIsLoading(false));
@@ -87,13 +99,41 @@ export default function TeamUsersPage() {
     setIsSavingAdd(true);
     setAddError(null);
     try {
-      await addOrganizationMember(addForm.email, addForm.role);
+      await createInvitation(addForm.email, addForm.role);
       closeAdd();
       load();
     } catch (err) {
-      setAddError(err instanceof Error ? err.message : "Could not add this team member.");
+      setAddError(err instanceof Error ? err.message : "Could not send this invite.");
     } finally {
       setIsSavingAdd(false);
+    }
+  }
+
+  // ── Pending invites ──────────────────────────────────────────────────
+
+  async function handleResend(invitation: PendingInvitation) {
+    setResendingId(invitation.id);
+    setInviteRowError(null);
+    try {
+      await resendInvitation(invitation.id, invitation.email);
+      load();
+    } catch (err) {
+      setInviteRowError(err instanceof Error ? err.message : "Could not resend this invite.");
+    } finally {
+      setResendingId(null);
+    }
+  }
+
+  async function handleRevoke(invitation: PendingInvitation) {
+    setRevokingId(invitation.id);
+    setInviteRowError(null);
+    try {
+      await revokeInvitation(invitation.id, invitation.email);
+      load();
+    } catch (err) {
+      setInviteRowError(err instanceof Error ? err.message : "Could not revoke this invite.");
+    } finally {
+      setRevokingId(null);
     }
   }
 
@@ -245,6 +285,56 @@ export default function TeamUsersPage() {
         </table>
       </div>
 
+      {isOwner && invitations.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-sm font-semibold text-navy">Pending Invites</h2>
+          {inviteRowError && <p className="text-sm text-red-600">{inviteRowError}</p>}
+          <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  <th className="px-5 py-3">Email</th>
+                  <th className="px-5 py-3">Role</th>
+                  <th className="px-5 py-3">Invited</th>
+                  <th className="px-5 py-3">Expires</th>
+                  <th className="px-5 py-3"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {invitations.map((invitation) => (
+                  <tr key={invitation.id}>
+                    <td className="px-5 py-3.5 text-gray-600">{invitation.email}</td>
+                    <td className="px-5 py-3.5 text-gray-600">{ROLE_LABELS[invitation.role]}</td>
+                    <td className="px-5 py-3.5 text-gray-600">{new Date(invitation.invitedAt).toLocaleDateString()}</td>
+                    <td className="px-5 py-3.5 text-gray-600">{new Date(invitation.expiresAt).toLocaleDateString()}</td>
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center justify-end gap-4">
+                        <button
+                          type="button"
+                          onClick={() => handleResend(invitation)}
+                          disabled={resendingId === invitation.id || revokingId === invitation.id}
+                          className="text-xs font-semibold text-teal hover:underline disabled:opacity-50"
+                        >
+                          {resendingId === invitation.id ? "Resending…" : "Resend"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRevoke(invitation)}
+                          disabled={resendingId === invitation.id || revokingId === invitation.id}
+                          className="text-xs font-semibold text-red-500 hover:underline disabled:opacity-50"
+                        >
+                          {revokingId === invitation.id ? "Revoking…" : "Revoke"}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Add member modal */}
       {isAddOpen && (
         <div
@@ -253,7 +343,7 @@ export default function TeamUsersPage() {
         >
           <div className="w-full max-w-md rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between border-b border-gray-100 px-6 py-4">
-              <h2 className="text-lg font-bold text-navy">Add team member</h2>
+              <h2 className="text-lg font-bold text-navy">Invite team member</h2>
               {!isSavingAdd && (
                 <button type="button" onClick={closeAdd} className="text-gray-400 hover:text-gray-600 text-xl leading-none mt-0.5">
                   ×
@@ -263,8 +353,7 @@ export default function TeamUsersPage() {
 
             <div className="flex flex-col gap-4 p-6">
               <p className="text-xs text-gray-400">
-                They&apos;ll need an existing Syntriq account first — if they don&apos;t have one yet, ask them to sign up,
-                then add them here.
+                We&apos;ll email them a link to join — no account needed yet.
               </p>
               <TextField
                 label="Email"
@@ -308,7 +397,7 @@ export default function TeamUsersPage() {
                   disabled={isSavingAdd}
                   className="flex-1 rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal/90 disabled:opacity-50"
                 >
-                  {isSavingAdd ? "Adding…" : "Add"}
+                  {isSavingAdd ? "Sending…" : "Send invite"}
                 </button>
               </div>
             </div>

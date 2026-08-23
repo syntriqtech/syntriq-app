@@ -28,6 +28,7 @@ export async function proxy(request: NextRequest) {
   const isCompanySetupPage = pathname === "/company-setup";
   const isChoosePlanPage = pathname === "/choose-plan";
   const isResetPasswordPage = pathname === "/reset-password";
+  const isAcceptInvitePage = pathname === "/accept-invite";
   const isApiRoute = pathname.startsWith("/api/");
   const isStripeApiRoute = pathname.startsWith("/api/stripe/");
   const isTrialProvisionRoute = pathname === "/api/trial/provision";
@@ -36,8 +37,11 @@ export async function proxy(request: NextRequest) {
   // client-side Supabase JS still needs to process the URL (hash tokens or
   // a ?code= param) to establish one. The server never sees that until
   // after the client mounts, so this page must be reachable while
-  // "unauthenticated" from the middleware's point of view.
-  if (!user && !isLoginPage && !isResetPasswordPage) {
+  // "unauthenticated" from the middleware's point of view. /accept-invite
+  // needs the same exemption: a logged-out visitor following an invite link
+  // has to be able to see who invited them before they have any session at
+  // all.
+  if (!user && !isLoginPage && !isResetPasswordPage && !isAcceptInvitePage) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
@@ -48,20 +52,24 @@ export async function proxy(request: NextRequest) {
   // Gate every protected page behind company setup until the profile's
   // required fields are filled in. Exempt the setup wizard itself (or the
   // gate would redirect-loop), the reset-password page (a user recovering
-  // their password shouldn't get bounced mid-flow), and API routes (they
-  // return JSON, not pages, so redirecting them would break the fetch calls
-  // that hit them). The settings page at /company-profile is intentionally
-  // NOT exempt — an incomplete user landing there directly gets sent
-  // through the wizard instead, since that's now the only path for initial
-  // setup.
-  if (user && !isApiRoute && !isCompanySetupPage && !isResetPasswordPage) {
-    const { data: companyProfile } = await supabase
-      .from("company_profile")
-      .select("company_setup_completed")
-      .eq("user_id", user.id)
-      .maybeSingle();
+  // their password shouldn't get bounced mid-flow), /accept-invite (an
+  // invited user who joined an org mid-signup has no personal profile row
+  // and shouldn't be bounced into the wizard before they even see the
+  // invite), and API routes (they return JSON, not pages, so redirecting
+  // them would break the fetch calls that hit them). The settings page at
+  // /company-profile is intentionally NOT exempt — an incomplete user
+  // landing there directly gets sent through the wizard instead, since
+  // that's now the only path for initial setup.
+  //
+  // has_completed_company_setup() (supabase/059) checks the org, not just
+  // the signed-in user's own row — a plain per-user check would loop an
+  // invited team member into the wizard forever, since they join an org
+  // that already has a completed profile but never get a personal row of
+  // their own.
+  if (user && !isApiRoute && !isCompanySetupPage && !isResetPasswordPage && !isAcceptInvitePage) {
+    const { data: hasCompletedSetup } = await supabase.rpc("has_completed_company_setup");
 
-    if (!companyProfile?.company_setup_completed) {
+    if (!hasCompletedSetup) {
       return NextResponse.redirect(new URL("/company-setup", request.url));
     }
   }
@@ -88,6 +96,7 @@ export async function proxy(request: NextRequest) {
     !isCompanySetupPage &&
     !isChoosePlanPage &&
     !isResetPasswordPage &&
+    !isAcceptInvitePage &&
     !isStripeApiRoute &&
     !isTrialProvisionRoute
   ) {

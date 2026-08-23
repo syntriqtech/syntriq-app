@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import TextField from "@/components/TextField";
 import Button from "@/components/Button";
@@ -9,12 +9,29 @@ import { createClient } from "@/lib/supabase/client";
 import { checkActivationKey, redeemActivationKey } from "@/lib/activationKeyDb";
 import { createUserProfileFromSignup } from "@/lib/userProfileDb";
 import { finalizeAccountFromMetadata } from "@/lib/signupFinalization";
+import { getInvitationPreview, InvitationPreview } from "@/lib/invitationsDb";
+
+const ROLE_LABELS: Record<string, string> = {
+  project_manager: "Project Manager",
+  project_accountant: "Project Accountant",
+};
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<main className="flex min-h-screen flex-1 items-center justify-center bg-gray-50 px-4" />}>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
+
+function LoginPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
 
-  const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
+  const inviteToken = searchParams.get("invite");
+
+  const [mode, setMode] = useState<"login" | "signup" | "forgot">(inviteToken ? "signup" : "login");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -24,6 +41,44 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signupMessage, setSignupMessage] = useState<string | null>(null);
+
+  // Invite-driven signup: skips the activation-key gate entirely (this
+  // person is joining an org that's already paying, not self-serving) and
+  // locks the email field to the address the invite was actually sent to.
+  const [invitePreview, setInvitePreview] = useState<InvitationPreview>(null);
+  const [isCheckingInvite, setIsCheckingInvite] = useState(Boolean(inviteToken));
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!inviteToken) return;
+    let cancelled = false;
+
+    getInvitationPreview(inviteToken)
+      .then((preview) => {
+        if (cancelled) return;
+        if (!preview) {
+          // Single source of truth for the "invalid or expired" message
+          // lives on /accept-invite — send them there instead of
+          // duplicating it here.
+          router.replace(`/accept-invite?token=${encodeURIComponent(inviteToken)}`);
+          return;
+        }
+        setInvitePreview(preview);
+        setEmail(preview.email);
+        setMode("signup");
+      })
+      .catch(() => {
+        if (!cancelled) setInviteError("Could not load this invite. Try the link again.");
+      })
+      .finally(() => {
+        if (!cancelled) setIsCheckingInvite(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inviteToken]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -54,34 +109,44 @@ export default function LoginPage() {
       }
 
       // Covers a user who signed up while "Confirm email" was on: the
-      // activation key and name were stashed in their auth metadata at
-      // signup (no session existed yet to redeem the key), and get finished
-      // here on their first login. No-op for everyone else.
+      // activation key/invite token and name were stashed in their auth
+      // metadata at signup (no session existed yet to redeem/accept), and
+      // get finished here on their first login. No-op for everyone else.
+      let pendingInviteToken: string | null = null;
       if (data.user) {
-        await finalizeAccountFromMetadata(data.user).catch(() => {});
+        const result = await finalizeAccountFromMetadata(data.user).catch(() => ({ inviteToken: null }));
+        pendingInviteToken = result.inviteToken;
       }
 
       setIsSubmitting(false);
-      router.push("/dashboard");
-      router.refresh();
-    } else {
-      const trimmedKey = activationKey.trim();
 
-      const keyValid = await checkActivationKey(trimmedKey).catch(() => false);
-      if (!keyValid) {
-        setIsSubmitting(false);
-        setActivationKeyError("Invalid or already-used activation key");
+      // Either this login just consumed a stashed invite above, or the
+      // visitor arrived via an invite link and chose to log in to an
+      // existing account instead of signing up — either way, the actual
+      // join (and its email-match / seat-cap checks) happens on
+      // /accept-invite, not here.
+      const tokenToAccept = pendingInviteToken || (invitePreview ? inviteToken : null);
+      if (tokenToAccept) {
+        router.push(`/accept-invite?token=${encodeURIComponent(tokenToAccept)}`);
+        router.refresh();
         return;
       }
 
+      router.push("/dashboard");
+      router.refresh();
+      return;
+    }
+
+    // mode === "signup"
+    if (inviteToken && invitePreview) {
       const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
+        email: invitePreview.email,
         password,
         options: {
           data: {
             first_name: firstName.trim(),
             last_name: lastName.trim(),
-            activation_key: trimmedKey,
+            invite_token: inviteToken,
           },
         },
       });
@@ -92,32 +157,91 @@ export default function LoginPage() {
       }
 
       if (!data.user || !data.session) {
-        // Email confirmation is required on this Supabase project — the key
-        // and name are stashed in auth metadata (see signUp options above)
-        // and get redeemed/saved on first login instead, once a session
-        // exists. See finalizeAccountFromMetadata.
+        // Email confirmation is required on this Supabase project — the
+        // invite token and name are stashed in auth metadata (see signUp
+        // options above) and get accepted/saved on first login instead,
+        // once a session exists. See finalizeAccountFromMetadata.
         setIsSubmitting(false);
         setSignupMessage("Account created. Check your email to confirm, then log in.");
         setMode("login");
         return;
       }
 
-      const redeemed = await redeemActivationKey(trimmedKey).catch(() => false);
-      if (!redeemed) {
-        setIsSubmitting(false);
-        setActivationKeyError("Invalid or already-used activation key");
-        return;
-      }
-
-      await createUserProfileFromSignup(data.user.id, firstName.trim(), lastName.trim());
+      await createUserProfileFromSignup(data.user.id, firstName.trim(), lastName.trim()).catch(() => {});
       await supabase.auth
-        .updateUser({ data: { activation_key: null, first_name: null, last_name: null } })
+        .updateUser({ data: { invite_token: null, first_name: null, last_name: null } })
         .catch(() => {});
 
       setIsSubmitting(false);
-      router.push("/company-setup");
+      // /accept-invite runs the actual join (org seat-cap check etc.) and
+      // shows a friendly error there if it can't complete yet — the
+      // account itself is already created either way.
+      router.push(`/accept-invite?token=${encodeURIComponent(inviteToken)}`);
       router.refresh();
+      return;
     }
+
+    // Normal, non-invite signup — unchanged.
+    const trimmedKey = activationKey.trim();
+
+    const keyValid = await checkActivationKey(trimmedKey).catch(() => false);
+    if (!keyValid) {
+      setIsSubmitting(false);
+      setActivationKeyError("Invalid or already-used activation key");
+      return;
+    }
+
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          activation_key: trimmedKey,
+        },
+      },
+    });
+    if (signUpError) {
+      setIsSubmitting(false);
+      setError(signUpError.message);
+      return;
+    }
+
+    if (!data.user || !data.session) {
+      // Email confirmation is required on this Supabase project — the key
+      // and name are stashed in auth metadata (see signUp options above)
+      // and get redeemed/saved on first login instead, once a session
+      // exists. See finalizeAccountFromMetadata.
+      setIsSubmitting(false);
+      setSignupMessage("Account created. Check your email to confirm, then log in.");
+      setMode("login");
+      return;
+    }
+
+    const redeemed = await redeemActivationKey(trimmedKey).catch(() => false);
+    if (!redeemed) {
+      setIsSubmitting(false);
+      setActivationKeyError("Invalid or already-used activation key");
+      return;
+    }
+
+    await createUserProfileFromSignup(data.user.id, firstName.trim(), lastName.trim());
+    await supabase.auth
+      .updateUser({ data: { activation_key: null, first_name: null, last_name: null } })
+      .catch(() => {});
+
+    setIsSubmitting(false);
+    router.push("/company-setup");
+    router.refresh();
+  }
+
+  if (isCheckingInvite) {
+    return (
+      <main className="flex min-h-screen flex-1 items-center justify-center bg-gray-50 px-4">
+        <p className="text-sm text-gray-500">Checking your invite…</p>
+      </main>
+    );
   }
 
   return (
@@ -139,6 +263,13 @@ export default function LoginPage() {
               Enter your email and we&apos;ll send you a link to reset your password.
             </p>
           )}
+          {invitePreview && (
+            <p className="text-center text-sm text-gray-500">
+              You&apos;ve been invited to join <strong className="text-navy">{invitePreview.organizationName}</strong>{" "}
+              as a <strong className="text-navy">{ROLE_LABELS[invitePreview.role] || invitePreview.role}</strong>.
+            </p>
+          )}
+          {inviteError && <p className="text-center text-sm text-red-600">{inviteError}</p>}
         </div>
 
         <form className="mt-6 flex flex-col gap-4" onSubmit={handleSubmit}>
@@ -175,6 +306,8 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            readOnly={Boolean(invitePreview)}
+            title={invitePreview ? "This invite is locked to the email it was sent to." : undefined}
           />
           {mode !== "forgot" && (
             <TextField
@@ -202,7 +335,7 @@ export default function LoginPage() {
               Forgot password?
             </button>
           )}
-          {mode === "signup" && (
+          {mode === "signup" && !invitePreview && (
             <TextField
               id="activationKey"
               label="Activation Key"
