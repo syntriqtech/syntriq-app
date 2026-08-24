@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { DbJob } from "@/lib/jobs";
 import { fetchCheckinsByMonth } from "@/lib/billingCheckinDb";
+import { fetchAllPayApplications } from "@/lib/payApplicationsDb";
 
 const URGENCY_STYLE: Record<string, string> = {
   calm:   "bg-gray-100 text-gray-600",
@@ -50,14 +51,19 @@ export default function BillingDueWidget({
     setIsLoading(true);
 
     const month = new Date().toISOString().slice(0, 7);
-    fetchCheckinsByMonth(month)
-      .then((checkins) => {
+    Promise.all([fetchCheckinsByMonth(month), fetchAllPayApplications()])
+      .then(([checkins, payApps]) => {
         if (cancelled) return;
         const yesIds = new Set(
           checkins.filter((c) => c.decision === "yes").map((c) => c.jobId)
         );
+        // Exclude jobs that already have a pay app on file this month —
+        // billed, not still due, even though the check-in said "yes".
+        const billedIds = new Set(
+          payApps.filter((a) => a.applicationDate.slice(0, 7) === month).map((a) => a.jobId)
+        );
         const billing = jobs
-          .filter((j) => yesIds.has(j.id))
+          .filter((j) => yesIds.has(j.id) && !billedIds.has(j.id))
           .map((j) => ({ job: j, daysLeft: daysUntilDue(j.billingDueDay) }))
           .sort((a, b) => a.daysLeft - b.daysLeft);
         setRows(billing);
