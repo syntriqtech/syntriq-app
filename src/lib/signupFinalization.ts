@@ -8,6 +8,7 @@ type PendingSignupMetadata = {
   invite_token?: string;
   first_name?: string;
   last_name?: string;
+  terms_version?: string;
 };
 
 /**
@@ -33,14 +34,19 @@ export async function finalizeAccountFromMetadata(user: User): Promise<{ inviteT
     if (pendingKey) {
       await redeemActivationKey(pendingKey).catch(() => {});
     }
-    await createUserProfileFromSignup(user.id, metadata?.first_name ?? "", metadata?.last_name ?? "").catch(
-      () => {}
-    );
+    await createUserProfileFromSignup(
+      user.id,
+      metadata?.first_name ?? "",
+      metadata?.last_name ?? "",
+      metadata?.terms_version ?? null
+    ).catch(() => {});
   }
 
   const supabase = createClient();
   await supabase.auth
-    .updateUser({ data: { activation_key: null, invite_token: null, first_name: null, last_name: null } })
+    .updateUser({
+      data: { activation_key: null, invite_token: null, first_name: null, last_name: null, terms_version: null },
+    })
     .catch(() => {});
 
   return { inviteToken: pendingInviteToken ?? null };

@@ -29,6 +29,7 @@ export async function proxy(request: NextRequest) {
   const isChoosePlanPage = pathname === "/choose-plan";
   const isResetPasswordPage = pathname === "/reset-password";
   const isAcceptInvitePage = pathname === "/accept-invite";
+  const isTermsPage = pathname === "/terms";
   const isApiRoute = pathname.startsWith("/api/");
   const isStripeApiRoute = pathname.startsWith("/api/stripe/");
   const isTrialProvisionRoute = pathname === "/api/trial/provision";
@@ -41,7 +42,7 @@ export async function proxy(request: NextRequest) {
   // needs the same exemption: a logged-out visitor following an invite link
   // has to be able to see who invited them before they have any session at
   // all.
-  if (!user && !isLoginPage && !isResetPasswordPage && !isAcceptInvitePage) {
+  if (!user && !isLoginPage && !isResetPasswordPage && !isAcceptInvitePage && !isTermsPage) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
@@ -66,7 +67,7 @@ export async function proxy(request: NextRequest) {
   // invited team member into the wizard forever, since they join an org
   // that already has a completed profile but never get a personal row of
   // their own.
-  if (user && !isApiRoute && !isCompanySetupPage && !isResetPasswordPage && !isAcceptInvitePage) {
+  if (user && !isApiRoute && !isCompanySetupPage && !isResetPasswordPage && !isAcceptInvitePage && !isTermsPage) {
     const { data: hasCompletedSetup } = await supabase.rpc("has_completed_company_setup");
 
     if (!hasCompletedSetup) {
@@ -97,6 +98,7 @@ export async function proxy(request: NextRequest) {
     !isChoosePlanPage &&
     !isResetPasswordPage &&
     !isAcceptInvitePage &&
+    !isTermsPage &&
     !isStripeApiRoute &&
     !isTrialProvisionRoute
   ) {

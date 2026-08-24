@@ -61,7 +61,8 @@ export async function saveUserProfile(
 export async function createUserProfileFromSignup(
   userId: string,
   firstName: string,
-  lastName: string
+  lastName: string,
+  termsVersion: string | null
 ): Promise<void> {
   const supabase = createClient();
   const fullName = `${firstName} ${lastName}`.trim();
@@ -71,6 +72,8 @@ export async function createUserProfileFromSignup(
     first_name: firstName,
     last_name: lastName,
     full_name: fullName,
+    terms_accepted_at: termsVersion ? new Date().toISOString() : null,
+    terms_version: termsVersion,
   });
 
   if (error) throw new Error(error.message);

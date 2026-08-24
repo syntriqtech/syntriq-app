@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import TextField from "@/components/TextField";
 import Button from "@/components/Button";
 import { createClient } from "@/lib/supabase/client";
@@ -10,6 +11,7 @@ import { checkActivationKey, redeemActivationKey } from "@/lib/activationKeyDb";
 import { createUserProfileFromSignup } from "@/lib/userProfileDb";
 import { finalizeAccountFromMetadata } from "@/lib/signupFinalization";
 import { getInvitationPreview, InvitationPreview } from "@/lib/invitationsDb";
+import { TERMS_LAST_UPDATED } from "@/lib/terms";
 
 const ROLE_LABELS: Record<string, string> = {
   project_manager: "Project Manager",
@@ -38,6 +40,7 @@ function LoginPageContent() {
   const [password, setPassword] = useState("");
   const [activationKey, setActivationKey] = useState("");
   const [activationKeyError, setActivationKeyError] = useState<string | null>(null);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signupMessage, setSignupMessage] = useState<string | null>(null);
@@ -138,6 +141,12 @@ function LoginPageContent() {
     }
 
     // mode === "signup"
+    if (!agreedToTerms) {
+      setIsSubmitting(false);
+      setError("Please agree to the Terms of Service to continue.");
+      return;
+    }
+
     if (inviteToken && invitePreview) {
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: invitePreview.email,
@@ -147,6 +156,7 @@ function LoginPageContent() {
             first_name: firstName.trim(),
             last_name: lastName.trim(),
             invite_token: inviteToken,
+            terms_version: TERMS_LAST_UPDATED,
           },
         },
       });
@@ -167,9 +177,11 @@ function LoginPageContent() {
         return;
       }
 
-      await createUserProfileFromSignup(data.user.id, firstName.trim(), lastName.trim()).catch(() => {});
+      await createUserProfileFromSignup(data.user.id, firstName.trim(), lastName.trim(), TERMS_LAST_UPDATED).catch(
+        () => {}
+      );
       await supabase.auth
-        .updateUser({ data: { invite_token: null, first_name: null, last_name: null } })
+        .updateUser({ data: { invite_token: null, first_name: null, last_name: null, terms_version: null } })
         .catch(() => {});
 
       setIsSubmitting(false);
@@ -199,6 +211,7 @@ function LoginPageContent() {
           first_name: firstName.trim(),
           last_name: lastName.trim(),
           activation_key: trimmedKey,
+          terms_version: TERMS_LAST_UPDATED,
         },
       },
     });
@@ -226,9 +239,9 @@ function LoginPageContent() {
       return;
     }
 
-    await createUserProfileFromSignup(data.user.id, firstName.trim(), lastName.trim());
+    await createUserProfileFromSignup(data.user.id, firstName.trim(), lastName.trim(), TERMS_LAST_UPDATED);
     await supabase.auth
-      .updateUser({ data: { activation_key: null, first_name: null, last_name: null } })
+      .updateUser({ data: { activation_key: null, first_name: null, last_name: null, terms_version: null } })
       .catch(() => {});
 
     setIsSubmitting(false);
@@ -351,11 +364,32 @@ function LoginPageContent() {
               error={activationKeyError ?? undefined}
             />
           )}
+          {mode === "signup" && (
+            <label className="flex items-start gap-2 text-sm text-gray-600">
+              <input
+                type="checkbox"
+                checked={agreedToTerms}
+                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                required
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal/40"
+              />
+              <span>
+                I agree to the{" "}
+                <Link href="/terms" target="_blank" rel="noopener noreferrer" className="text-teal hover:underline">
+                  Terms of Service
+                </Link>
+              </span>
+            </label>
+          )}
 
           {error && <p className="text-sm text-red-600">{error}</p>}
           {signupMessage && <p className="text-sm text-teal">{signupMessage}</p>}
 
-          <Button type="submit" className="mt-2" disabled={isSubmitting}>
+          <Button
+            type="submit"
+            className="mt-2"
+            disabled={isSubmitting || (mode === "signup" && !agreedToTerms)}
+          >
             {isSubmitting
               ? "Please wait…"
               : mode === "login"
