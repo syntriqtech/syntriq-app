@@ -10,6 +10,8 @@ import { useCoExposure } from "@/hooks/useCoExposure";
 import { useRetentionBadge } from "@/hooks/useRetentionBadge";
 import { useBillingCheckinBadge } from "@/hooks/useBillingCheckinBadge";
 import { useSidebarPrefs } from "@/hooks/useSidebarPrefs";
+import { fetchOrganizationMembers } from "@/lib/organizationMembersDb";
+import { getCurrentUserContext } from "@/lib/currentUserContext";
 
 type NavItem = {
   label: string;
@@ -103,6 +105,17 @@ export default function Sidebar() {
   const { pendingCount: checkinPendingCount } = useBillingCheckinBadge();
   const { tabOrder, hiddenTabs, updateOrder, toggleHidden } = useSidebarPrefs();
 
+  // Activity log is owner-only (mirrors the page's own gate) — hidden from
+  // the nav entirely for everyone else rather than showing a dead end.
+  const [isOwner, setIsOwner] = useState(false);
+  useEffect(() => {
+    Promise.all([fetchOrganizationMembers(), getCurrentUserContext()])
+      .then(([members, ctx]) => {
+        setIsOwner(members.find((m) => m.userId === ctx.userId)?.role === "owner");
+      })
+      .catch(() => {});
+  }, []);
+
   const [editMode, setEditMode] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
@@ -117,18 +130,23 @@ export default function Sidebar() {
   // Apply saved order on top of the canonical DEFAULT_NAV_ITEMS list.
   // Any new items added to DEFAULT_NAV_ITEMS that aren't in the saved order
   // are appended at the end so they automatically show up for existing users.
+  const navItems = useMemo<NavItem[]>(
+    () => (isOwner ? DEFAULT_NAV_ITEMS : DEFAULT_NAV_ITEMS.filter((item) => item.href !== "/activity")),
+    [isOwner]
+  );
+
   const orderedItems = useMemo<NavItem[]>(() => {
-    if (tabOrder.length === 0) return DEFAULT_NAV_ITEMS;
+    if (tabOrder.length === 0) return navItems;
     const ordered: NavItem[] = [];
     for (const href of tabOrder) {
-      const item = DEFAULT_NAV_ITEMS.find((i) => i.href === href);
+      const item = navItems.find((i) => i.href === href);
       if (item) ordered.push(item);
     }
-    for (const item of DEFAULT_NAV_ITEMS) {
+    for (const item of navItems) {
       if (!tabOrder.includes(item.href)) ordered.push(item);
     }
     return ordered;
-  }, [tabOrder]);
+  }, [tabOrder, navItems]);
 
   // In normal mode, hidden tabs are fully removed.
   // In edit mode, all tabs show (hidden ones are dimmed).
