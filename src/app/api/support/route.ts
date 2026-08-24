@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { error } = await resend.emails.send({
-      from: "Syntriq Support <onboarding@resend.dev>",
+      from: "Syntriq Support <support@mail.syntriqtech.com>",
       to: "syntriqtech@gmail.com",
       replyTo: email || "noreply@syntriq.com",
       subject: `[Support] ${category}: ${subject || "(no subject)"}`,

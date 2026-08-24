@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   });
 
   const { error: sendError } = await resend.emails.send({
-    from: "Syntriq <onboarding@resend.dev>",
+    from: "Syntriq <invites@mail.syntriqtech.com>",
     to: email,
     subject,
     html,
