@@ -15,6 +15,7 @@ import {
 } from "@/lib/billingCheckinDb";
 import { computeAllJobMetrics, JobMetrics } from "@/lib/dashboardMetrics";
 import { fetchChangeOrders } from "@/lib/changeOrdersDb";
+import { fetchAllPayApplications, PayApplication } from "@/lib/payApplicationsDb";
 
 function formatMonth(yyyyMm: string): string {
   if (!yyyyMm) return "";
@@ -24,6 +25,19 @@ function formatMonth(yyyyMm: string): string {
     year: "numeric",
   });
 }
+
+function formatShortDate(yyyyMmDd: string): string {
+  if (!yyyyMmDd) return "";
+  const [y, m, d] = yyyyMmDd.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+const currency = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
 
 function daysUntilDue(dueDay: number, forMonth: string): number {
   const [y, m] = forMonth.split("-").map(Number);
@@ -100,6 +114,7 @@ export default function BillingCheckinPage() {
   const [error, setError] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<Map<string, JobMetrics>>(new Map());
   const [pendingCoCounts, setPendingCoCounts] = useState<Record<string, number>>({});
+  const [payAppsThisMonth, setPayAppsThisMonth] = useState<Map<string, PayApplication[]>>(new Map());
 
   const month = currentMonth();
 
@@ -129,6 +144,24 @@ export default function BillingCheckinPage() {
       })
       .catch(() => {});
   }, []);
+
+  // Pay apps actually dated this month — used to tell "confirmed billing
+  // this month" apart from "already billed this month" so a job whose PA
+  // submitted the paperwork doesn't keep showing as overdue.
+  useEffect(() => {
+    fetchAllPayApplications()
+      .then((apps) => {
+        const map = new Map<string, PayApplication[]>();
+        for (const app of apps) {
+          if (app.applicationDate.slice(0, 7) !== month) continue;
+          const list = map.get(app.jobId);
+          if (list) list.push(app);
+          else map.set(app.jobId, [app]);
+        }
+        setPayAppsThisMonth(map);
+      })
+      .catch(() => {});
+  }, [month]);
 
   useEffect(() => {
     if (jobs.length === 0) return;
@@ -160,6 +193,11 @@ export default function BillingCheckinPage() {
       const job = jobs.find((j) => j.id === c.jobId);
       return job ? [{ checkin: c, job }] : [];
     });
+
+  // Split "yes" jobs into ones that already have a pay app on file this
+  // month (billed) vs. ones still waiting on the actual paperwork.
+  const billedJobs = yesJobs.filter(({ job }) => payAppsThisMonth.has(job.id));
+  const awaitingJobs = yesJobs.filter(({ job }) => !payAppsThisMonth.has(job.id));
 
   // Jobs that said "no" this month (deferred)
   const noJobs = checkins
@@ -244,7 +282,7 @@ export default function BillingCheckinPage() {
 
       {/* Summary strip */}
       {totalDue > 0 && (
-        <div className="grid grid-cols-3 divide-x divide-gray-100 rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <div className="grid grid-cols-4 divide-x divide-gray-100 rounded-2xl border border-gray-100 bg-white shadow-sm">
           <div className="p-5">
             <div className="text-sm text-gray-500">Still pending</div>
             <div className={`mt-1 text-2xl font-bold ${pendingJobs.length > 0 ? "text-amber-700" : "text-gray-300"}`}>
@@ -253,7 +291,11 @@ export default function BillingCheckinPage() {
           </div>
           <div className="p-5">
             <div className="text-sm text-gray-500">Billing this month</div>
-            <div className="mt-1 text-2xl font-bold text-teal">{yesJobs.length}</div>
+            <div className="mt-1 text-2xl font-bold text-teal">{awaitingJobs.length}</div>
+          </div>
+          <div className="p-5">
+            <div className="text-sm text-gray-500">Billed</div>
+            <div className="mt-1 text-2xl font-bold text-green-700">{billedJobs.length}</div>
           </div>
           <div className="p-5">
             <div className="text-sm text-gray-500">Deferred</div>
@@ -364,16 +406,16 @@ export default function BillingCheckinPage() {
             </div>
           )}
 
-          {/* ── Billing this month ────────────────────────────── */}
-          {yesJobs.length > 0 && (
+          {/* ── Billing this month (confirmed, not yet submitted) ── */}
+          {awaitingJobs.length > 0 && (
             <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
               <div className="border-b border-gray-100 px-5 py-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-teal">
-                  Billing this month — {yesJobs.length} job{yesJobs.length !== 1 ? "s" : ""}
+                  Billing this month — {awaitingJobs.length} job{awaitingJobs.length !== 1 ? "s" : ""}
                 </p>
               </div>
               <div className="divide-y divide-gray-50">
-                {yesJobs.map(({ job }) => {
+                {awaitingJobs.map(({ job }) => {
                   const days = daysUntilDue(job.billingDueDay, month);
                   const tier = urgencyTier(days);
                   const isRed = tier === "red";
@@ -412,6 +454,63 @@ export default function BillingCheckinPage() {
                         </span>
                         <span className="inline-flex items-center rounded-full bg-teal/10 px-2.5 py-0.5 text-xs font-semibold text-teal">
                           Billing this month
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleUndo(job)}
+                          disabled={!!submitting}
+                          className="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                        >
+                          {submitting === job.id ? "…" : "Undo"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Billed (pay app already on file this month) ─────── */}
+          {billedJobs.length > 0 && (
+            <div className="rounded-2xl border border-green-200 bg-white shadow-sm overflow-hidden">
+              <div className="bg-green-50 border-b border-green-100 px-5 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-green-700">
+                  Billed — {billedJobs.length} job{billedJobs.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {billedJobs.map(({ job }) => {
+                  const apps = payAppsThisMonth.get(job.id) ?? [];
+                  const totalBilled = apps.reduce((sum, a) => sum + a.amountBilled, 0);
+                  const latestDate = apps.reduce(
+                    (latest, a) => (a.applicationDate > latest ? a.applicationDate : latest),
+                    apps[0]?.applicationDate ?? ""
+                  );
+                  return (
+                    <div
+                      key={job.id}
+                      className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 font-semibold text-navy">
+                          <Link href={`/jobs/${job.id}`} className="hover:text-teal hover:underline">
+                            {job.jobName || job.jobNumber}
+                          </Link>
+                          <span className="text-xs font-normal text-gray-400">#{job.jobNumber}</span>
+                          <PendingCoBadge count={pendingCoCounts[job.id] ?? 0} />
+                          <BillingPlatformBadge platform={job.billingPlatform} />
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {job.customer} · {currency.format(totalBilled)} billed {formatShortDate(latestDate)}
+                        </div>
+                        <div className="mt-1.5">
+                          <CompletionBar percent={metrics.get(job.id)?.percentComplete} />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
+                          Billed
                         </span>
                         <button
                           type="button"
