@@ -29,6 +29,10 @@ const TOTALS_FILL = "#D9E2F3";
 const SUMMARY_HIGHLIGHT = "#DCE6F1";
 const SUMMARY_FINAL = "#D9E2F3";
 const MARGIN = 36;
+// Shared width for every money column on the G702 page, so the summary
+// table's value column and the change order table's ADDITIONS/DEDUCTIONS
+// columns all land on the same x range.
+const MONEY_COL = 100;
 
 const LINE_ITEM_COLUMN_WIDTHS = [30, 130, 75, 75, 75, 75, 75, 55, 75, 55];
 
@@ -377,6 +381,22 @@ function drawSectionHeading(doc: jsPDF, text: string, y: number) {
   return y + 11;
 }
 
+// G702-page heading: navy text with a thin navy rule beneath, so the G702
+// and G703 pages read as one visual system (the G703 tables use a solid
+// navy header band; a filled bar would be too heavy for the G702's
+// narrower two-column layout, so a rule is used instead).
+function drawG702SectionHeading(doc: jsPDF, text: string, x: number, y: number, width: number) {
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(NAVY);
+  doc.text(text, x, y);
+  const ruleY = y + 4;
+  doc.setDrawColor(NAVY);
+  doc.setLineWidth(0.75);
+  doc.line(x, ruleY, x + width, ruleY);
+  return ruleY + 8;
+}
+
 const TABLE_HEADERS = [
   "Item",
   "Description",
@@ -562,27 +582,34 @@ function drawWrappedText(doc: jsPDF, text: string, x: number, y: number, width: 
   return y + lines.length * lineHeight;
 }
 
+// The rule sits 1.5pt below the label baseline; a value (typed date, or a
+// signature image) is drawn with its own baseline/bottom landing exactly on
+// that rule, so both By/Date pairs share one baseline reference.
+const FIELD_RULE_OFFSET = 1.5;
+
 function drawFieldLine(doc: jsPDF, label: string, x: number, y: number, width: number, value?: string) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.setTextColor(LABEL_GRAY);
   doc.text(label, x, y);
   const labelWidth = doc.getTextWidth(`${label} `);
+  const ruleY = y + FIELD_RULE_OFFSET;
   doc.setDrawColor(BORDER);
   doc.setLineWidth(0.5);
-  doc.line(x + labelWidth, y + 1.5, x + width, y + 1.5);
+  doc.line(x + labelWidth, ruleY, x + width, ruleY);
   if (value) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor("#000000");
-    doc.text(value, x + labelWidth + 3, y);
+    doc.text(value, x + labelWidth + 3, ruleY);
   }
 }
 
 function drawSignatureImage(doc: jsPDF, dataUrl: string, x: number, y: number, maxWidth: number) {
   const imgHeight = 32;
   const imgWidth = Math.min(maxWidth, 140);
-  doc.addImage(dataUrl, "PNG", x, y - imgHeight + 4, imgWidth, imgHeight);
+  const ruleY = y + FIELD_RULE_OFFSET;
+  doc.addImage(dataUrl, "PNG", x, ruleY - imgHeight, imgWidth, imgHeight);
 }
 
 function drawG702Scope(doc: jsPDF, data: PayAppPdfData, startY: number) {
@@ -605,12 +632,7 @@ function drawG702Scope(doc: jsPDF, data: PayAppPdfData, startY: number) {
   const rightWidth = doc.internal.pageSize.getWidth() - MARGIN - rightX;
 
   // ---- Left column: certification statement + numbered summary + change order summary ----
-  let leftY = startY;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(NAVY);
-  doc.text("SUBCONTRACTOR'S APPLICATION FOR PAYMENT", leftX, leftY);
-  leftY += 12;
+  let leftY = drawG702SectionHeading(doc, "SUBCONTRACTOR'S APPLICATION FOR PAYMENT", leftX, startY, leftWidth);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
@@ -623,6 +645,9 @@ function drawG702Scope(doc: jsPDF, data: PayAppPdfData, startY: number) {
   const cwPercent = `${(data.cwRate * 100).toFixed(0)}%`;
   const smPercent = `${(data.smRate * 100).toFixed(0)}%`;
 
+  // Shading rule: SUMMARY_HIGHLIGHT marks derived subtotals (line 3, Total
+  // Retainage); SUMMARY_FINAL marks only line 8 Current Payment Due and the
+  // AMOUNT CERTIFIED band below. Everything else is plain white.
   const summaryRows: { label: string; value: string; fill?: string; emphasize?: boolean }[] = [
     { label: "1. Original Subcontract Sum", value: currency(data.job.contractValue) },
     { label: "2. Net Change By Change Orders", value: currency(netChangeOrders) },
@@ -652,8 +677,8 @@ function drawG702Scope(doc: jsPDF, data: PayAppPdfData, startY: number) {
       lineWidth: 0.5,
     },
     columnStyles: {
-      0: { cellWidth: 300, halign: "left" },
-      1: { cellWidth: 130, halign: "right" },
+      0: { cellWidth: leftWidth - MONEY_COL, halign: "left" },
+      1: { cellWidth: MONEY_COL, halign: "right" },
     },
     tableWidth: leftWidth,
     didParseCell: (cellData) => {
@@ -669,23 +694,21 @@ function drawG702Scope(doc: jsPDF, data: PayAppPdfData, startY: number) {
 
   leftY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 14;
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(NAVY);
-  doc.text("CHANGE ORDER SUMMARY", leftX, leftY);
-  leftY += 12;
+  leftY = drawG702SectionHeading(doc, "CHANGE ORDER SUMMARY", leftX, leftY, leftWidth);
 
   const previousChangeOrders = 0;
   const approvedThisMonth = netChangeOrders - previousChangeOrders;
   const additions = data.changeOrders.filter((co) => co.scheduledValue >= 0).reduce((sum, co) => sum + co.scheduledValue, 0);
   const deductions = data.changeOrders.filter((co) => co.scheduledValue < 0).reduce((sum, co) => sum + -co.scheduledValue, 0);
 
-  const changeOrderRows: { label: string; additions: string; deductions: string; fill?: string; isHeader?: boolean }[] = [
+  // Only TOTAL gets SUMMARY_HIGHLIGHT. NET CHANGES is the closing line, not
+  // a second subtotal, so it stays plain with a top rule instead of a fill.
+  const changeOrderRows: { label: string; additions: string; deductions: string; fill?: string; isHeader?: boolean; isClosingLine?: boolean }[] = [
     { label: "", additions: "ADDITIONS", deductions: "DEDUCTIONS", isHeader: true },
     { label: "Total changes approved in previous months by Owner", additions: currency(previousChangeOrders), deductions: currency(0) },
     { label: "Total Approved this Month", additions: currency(additions), deductions: currency(deductions) },
     { label: "TOTAL", additions: currency(previousChangeOrders + additions), deductions: currency(deductions), fill: SUMMARY_HIGHLIGHT },
-    { label: "NET CHANGES by Change Order", additions: currency(netChangeOrders), deductions: "", fill: SUMMARY_HIGHLIGHT },
+    { label: "NET CHANGES by Change Order", additions: currency(netChangeOrders), deductions: "", isClosingLine: true },
   ];
 
   autoTable(doc, {
@@ -703,9 +726,9 @@ function drawG702Scope(doc: jsPDF, data: PayAppPdfData, startY: number) {
       lineWidth: 0.5,
     },
     columnStyles: {
-      0: { cellWidth: 230, halign: "left" },
-      1: { cellWidth: 100, halign: "right" },
-      2: { cellWidth: 100, halign: "right" },
+      0: { cellWidth: leftWidth - MONEY_COL * 2, halign: "left" },
+      1: { cellWidth: MONEY_COL, halign: "right" },
+      2: { cellWidth: MONEY_COL, halign: "right" },
     },
     tableWidth: leftWidth,
     didParseCell: (cellData) => {
@@ -715,6 +738,9 @@ function drawG702Scope(doc: jsPDF, data: PayAppPdfData, startY: number) {
       }
       if (row?.isHeader) {
         cellData.cell.styles.fontStyle = "bolditalic";
+      }
+      if (row?.isClosingLine) {
+        cellData.cell.styles.lineWidth = { top: 0.75, right: 0, bottom: 0, left: 0 };
       }
     },
   });
@@ -751,11 +777,7 @@ function drawG702Scope(doc: jsPDF, data: PayAppPdfData, startY: number) {
 
   rightY += 18;
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(NAVY);
-  doc.text("CERTIFICATE FOR PAYMENT", rightX, rightY);
-  rightY += 11;
+  rightY = drawG702SectionHeading(doc, "CERTIFICATE FOR PAYMENT", rightX, rightY, rightWidth);
 
   doc.setFont("helvetica", "italic");
   doc.setFontSize(7.5);
@@ -776,14 +798,27 @@ function drawG702Scope(doc: jsPDF, data: PayAppPdfData, startY: number) {
   doc.text("AMOUNT CERTIFIED.", rightX, rightY);
   rightY += 10;
 
+  // Same internal geometry as the left-column tables: a label cell plus a
+  // MONEY_COL-wide value cell flush to the right panel's edge, same
+  // cellPadding and border weight, so this reads as a row of the same
+  // system rather than a floating chip.
+  const certLabelWidth = rightWidth - MONEY_COL;
+  const certRowHeight = 20;
+  const certTop = rightY - 9;
+
+  doc.setDrawColor(BORDER);
+  doc.setLineWidth(0.5);
   doc.setFillColor(SUMMARY_FINAL);
-  doc.rect(rightX, rightY - 9, rightWidth, 20, "F");
+  doc.rect(rightX, certTop, certLabelWidth, certRowHeight, "FD");
+  doc.rect(rightX + certLabelWidth, certTop, MONEY_COL, certRowHeight, "FD");
+
+  const certTextY = certTop + certRowHeight / 2 + 3;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor("#000000");
-  doc.text("AMOUNT CERTIFIED:", rightX + 6, rightY + 4);
+  doc.text("AMOUNT CERTIFIED:", rightX + 8, certTextY);
   doc.setFontSize(10);
-  doc.text(currency(currentPaymentDue), rightX + rightWidth - 6, rightY + 4, { align: "right" });
+  doc.text(currency(currentPaymentDue), rightX + certLabelWidth + MONEY_COL - 8, certTextY, { align: "right" });
   rightY += 18;
 
   doc.setFont("helvetica", "italic");
