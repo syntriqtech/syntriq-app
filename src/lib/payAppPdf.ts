@@ -34,7 +34,10 @@ const MARGIN = 36;
 // columns all land on the same x range.
 const MONEY_COL = 100;
 
-const LINE_ITEM_COLUMN_WIDTHS = [30, 130, 75, 75, 75, 75, 75, 55, 75, 55];
+// Retention (last column) is currency and needs the same 75pt a money
+// column needs now that figures carry cents — $100,000.00+ wrapped to two
+// lines at the old 55pt width. Description absorbs the 20pt difference.
+const LINE_ITEM_COLUMN_WIDTHS = [30, 110, 75, 75, 75, 75, 75, 55, 75, 75];
 
 function currency(value: number) {
   return value.toLocaleString("en-US", {
