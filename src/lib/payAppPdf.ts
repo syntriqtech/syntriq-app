@@ -119,63 +119,119 @@ function splitAddress(address: string): [string, string] {
   return [address, ""];
 }
 
+const CAPTION_LETTER_SPACING = 0.5;
+
+// Draws a small uppercase caption label (e.g. "TO CONTRACTOR") with letter-spacing.
+function drawCaptionLabel(doc: jsPDF, text: string, x: number, y: number) {
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(LABEL_GRAY);
+  doc.text(text.toUpperCase(), x, y, { charSpace: CAPTION_LETTER_SPACING });
+}
+
 // Computes the box height needed to fit all fields with text wrapping.
-function computeWrappedBoxHeight(doc: jsPDF, fields: [string, string][], colWidth: number): number {
-  const LINE_H = 11;
+//
+// mode "stacked": each labeled field starts a new group rendered as a small
+// caption line followed by its value line(s) beneath, flush left (used for
+// address-style header cells). Fields with an empty label are continuation
+// value lines appended to the current group.
+//
+// mode "inline": every field is "Label: value" on one line (used for the
+// Application No / Period To style cells), sized without wrapping.
+function computeWrappedBoxHeight(
+  doc: jsPDF,
+  fields: [string, string][],
+  colWidth: number,
+  mode: "stacked" | "inline" = "stacked"
+): number {
   const PAD_X = 8;
-  let totalLines = 0;
-  for (const [label, value] of fields) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    const labelWidth = label ? doc.getTextWidth(`${label} `) : 0;
-    const textWidth = colWidth - PAD_X * 2 - labelWidth - (label ? 4 : 0);
-    doc.setFont("helvetica", "normal");
-    const lines = doc.splitTextToSize(value || "", Math.max(textWidth, 10));
-    totalLines += Math.max(lines.length, 1);
+
+  if (mode === "inline") {
+    return fields.length * 11 + 12;
   }
-  return totalLines * LINE_H + 12;
+
+  const LABEL_H = 10;
+  const VALUE_H = 11;
+  const GROUP_GAP = 5;
+  const TOP_PAD = 8;
+  const BOTTOM_PAD = 6;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+
+  let height = TOP_PAD;
+  let firstGroup = true;
+  for (const [label, value] of fields) {
+    if (label) {
+      if (!firstGroup) height += GROUP_GAP;
+      height += LABEL_H;
+      firstGroup = false;
+    }
+    const lines = doc.splitTextToSize(value || "", colWidth - PAD_X * 2);
+    height += Math.max(lines.length, 1) * VALUE_H;
+  }
+  height += BOTTOM_PAD;
+  return height;
 }
 
 // Draws a single info box with text wrapping instead of truncation.
+// See computeWrappedBoxHeight for the two rendering modes.
 function drawInfoBoxWrapping(
   doc: jsPDF,
   fields: [string, string][],
   x: number,
   y: number,
   colWidth: number,
-  boxHeight: number
+  boxHeight: number,
+  mode: "stacked" | "inline" = "stacked"
 ): void {
-  const LINE_H = 11;
   const PAD_X = 8;
 
   doc.setDrawColor(BORDER);
   doc.setLineWidth(0.5);
   doc.rect(x, y, colWidth, boxHeight);
 
-  type Pre = { label: string; labelWidth: number; lines: string[] };
-  const precomputed: Pre[] = fields.map(([label, value]) => {
+  if (mode === "inline") {
+    const LINE_H = 11;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
-    const labelWidth = label ? doc.getTextWidth(`${label} `) : 0;
-    const textWidth = colWidth - PAD_X * 2 - labelWidth - (label ? 4 : 0);
-    doc.setFont("helvetica", "normal");
-    const lines = doc.splitTextToSize(value || "", Math.max(textWidth, 10));
-    return { label, labelWidth, lines };
-  });
+    const maxLabelWidth = Math.max(...fields.map(([label]) => doc.getTextWidth(`${label} `)));
+    const topPad = (boxHeight - Math.max(0, fields.length - 1) * LINE_H) / 2;
+    fields.forEach(([label, value], index) => {
+      const fieldY = y + topPad + index * LINE_H;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(LABEL_GRAY);
+      doc.text(label, x + PAD_X, fieldY);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor("#000000");
+      const valueX = x + PAD_X + maxLabelWidth + 4;
+      const availableWidth = colWidth - PAD_X - maxLabelWidth - 4 - 6;
+      doc.text(truncateToWidth(doc, value || "—", availableWidth), valueX, fieldY);
+    });
+    return;
+  }
 
-  const topPad = 8;
-  let textY = y + topPad + LINE_H * 0.75;
-  for (const { label, labelWidth, lines } of precomputed) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(LABEL_GRAY);
-    if (label) doc.text(label, x + PAD_X, textY);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor("#000000");
-    if (lines.length > 0) {
-      doc.text(lines, x + PAD_X + labelWidth + (label ? 4 : 0), textY);
+  const LABEL_H = 10;
+  const VALUE_H = 11;
+  const GROUP_GAP = 5;
+  const TOP_PAD = 8;
+
+  let textY = y + TOP_PAD + 7;
+  let firstGroup = true;
+  for (const [label, value] of fields) {
+    if (label) {
+      if (!firstGroup) textY += GROUP_GAP;
+      drawCaptionLabel(doc, label, x + PAD_X, textY);
+      textY += LABEL_H;
+      firstGroup = false;
     }
-    textY += Math.max(lines.length, 1) * LINE_H;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor("#000000");
+    const lines = doc.splitTextToSize(value || "—", colWidth - PAD_X * 2);
+    doc.text(lines, x + PAD_X, textY);
+    textY += Math.max(lines.length, 1) * VALUE_H;
   }
 }
 
@@ -218,7 +274,7 @@ function drawG702Header(doc: jsPDF, data: PayAppPdfData, title: string, subtitle
   const col3Width = tableWidth * 0.28;
   const col4Width = tableWidth - col1Width - col2Width - col3Width;
   const top = MARGIN + 34;
-  const stackedRowHeight = 30;
+  const rowHeightFloor = 30;
 
   const col1X = MARGIN;
   const col2X = col1X + col1Width;
@@ -230,71 +286,84 @@ function drawG702Header(doc: jsPDF, data: PayAppPdfData, title: string, subtitle
   const [subStreet, subCityStateZip] = splitAddress(data.contractorAddress);
   const [jobStreet, jobCityStateZip] = splitAddress(data.job.jobAddress);
 
-  const toOwnerFields: [string, string][] = [
-    ["To Contractor:", data.job.customer],
+  // Row 1
+  const toContractorFields: [string, string][] = [
+    ["To Contractor", data.job.customer],
     ...(gcStreet        ? [["", gcStreet]        as [string, string]] : []),
     ...(gcCityStateZip  ? [["", gcCityStateZip]  as [string, string]] : []),
   ];
-  const fromContractorFields: [string, string][] = [
-    ["From Subcontractor:", data.contractorName],
-    ...(subStreet       ? [["", subStreet]       as [string, string]] : []),
-    ...(subCityStateZip ? [["", subCityStateZip] as [string, string]] : []),
-  ];
   const projectFields: [string, string][] = [
-    ["Project:", data.job.jobName || data.job.jobNumber],
+    ["Project", data.job.jobName || data.job.jobNumber],
     ...(jobStreet       ? [["", jobStreet]       as [string, string]] : []),
     ...(jobCityStateZip ? [["", jobCityStateZip] as [string, string]] : []),
   ];
-  const viaArchitectFields: [string, string][] = [["Via Architect:", data.job.architect], ["", ""]];
+  const row1Col3Fields: [string, string][] = [
+    ["Application No:", data.applicationNumber],
+    ["Period To:", formatDate(data.periodTo)],
+    ["Application Date:", formatDate(data.applicationDate)],
+  ];
+
+  // Row 2
+  const fromSubcontractorFields: [string, string][] = [
+    ["From Subcontractor", data.contractorName],
+    ...(subStreet       ? [["", subStreet]       as [string, string]] : []),
+    ...(subCityStateZip ? [["", subCityStateZip] as [string, string]] : []),
+  ];
+  const viaArchitectAndSubForFields: [string, string][] = [
+    ["Via Architect", data.job.architect],
+    ["Subcontract For", data.job.contractFor],
+  ];
+  const row2Col3Fields: [string, string][] = [
+    ["Subcontract Date:", formatDate(data.job.contractDate)],
+    ["GC Project #:", data.job.architectProjectNumber],
+    ["Job Number:", data.job.jobNumber],
+  ];
 
   const row1Height = Math.max(
-    computeWrappedBoxHeight(doc, toOwnerFields, col1Width),
+    computeWrappedBoxHeight(doc, toContractorFields, col1Width),
     computeWrappedBoxHeight(doc, projectFields, col2Width),
-    stackedRowHeight
+    computeWrappedBoxHeight(doc, row1Col3Fields, col3Width, "inline"),
+    rowHeightFloor
   );
   const row2Height = Math.max(
-    computeWrappedBoxHeight(doc, fromContractorFields, col1Width),
-    computeWrappedBoxHeight(doc, viaArchitectFields, col2Width),
-    stackedRowHeight
+    computeWrappedBoxHeight(doc, fromSubcontractorFields, col1Width),
+    computeWrappedBoxHeight(doc, viaArchitectAndSubForFields, col2Width),
+    computeWrappedBoxHeight(doc, row2Col3Fields, col3Width, "inline"),
+    rowHeightFloor
   );
 
-  drawInfoBoxWrapping(doc, toOwnerFields,        col1X, top,              col1Width, row1Height);
-  drawInfoBoxWrapping(doc, fromContractorFields, col1X, top + row1Height, col1Width, row2Height);
-  drawInfoBoxWrapping(doc, projectFields,        col2X, top,              col2Width, row1Height);
-  drawInfoBoxWrapping(doc, viaArchitectFields,   col2X, top + row1Height, col2Width, row2Height);
-
-  drawInfoBoxes(
-    doc,
-    [
-      [
-        ["Application No:", data.applicationNumber],
-        ["Period To:", formatDate(data.periodTo)],
-        ["Subcontract For:", data.job.contractFor],
-        ["Subcontract Date:", formatDate(data.job.contractDate)],
-        ["GC Project #:", data.job.architectProjectNumber],
-      ],
-    ],
-    top,
-    [col3Width],
-    col3X
-  );
+  drawInfoBoxWrapping(doc, toContractorFields,          col1X, top,              col1Width, row1Height);
+  drawInfoBoxWrapping(doc, fromSubcontractorFields,      col1X, top + row1Height, col1Width, row2Height);
+  drawInfoBoxWrapping(doc, projectFields,                col2X, top,              col2Width, row1Height);
+  drawInfoBoxWrapping(doc, viaArchitectAndSubForFields,  col2X, top + row1Height, col2Width, row2Height);
+  drawInfoBoxWrapping(doc, row1Col3Fields,               col3X, top,              col3Width, row1Height, "inline");
+  drawInfoBoxWrapping(doc, row2Col3Fields,               col3X, top + row1Height, col3Width, row2Height, "inline");
 
   const distributionTop = top;
   const distributionHeight = row1Height + row2Height;
+  const PAD_X = 8;
   doc.setDrawColor(BORDER);
   doc.setLineWidth(0.5);
   doc.rect(col4X, distributionTop, col4Width, distributionHeight);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(LABEL_GRAY);
-  doc.text("Distribution To:", col4X + 6, distributionTop + 9);
-  doc.setFont("helvetica", "normal");
+
+  const captionY = distributionTop + 14;
+  drawCaptionLabel(doc, "Distribution To", col4X + PAD_X, captionY);
+
+  const labelBottom = captionY + 8;
+  const innerBottom = distributionTop + distributionHeight - 8;
+  const innerHeight = innerBottom - labelBottom;
   const distributionRows = ["Owner", "Architect", "Contractor", "Field", "Other"];
-  const distributionLineGap = (distributionHeight - 12) / distributionRows.length;
+  const rowStep = innerHeight / distributionRows.length;
+  const checkboxSize = 8;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor("#000000");
   distributionRows.forEach((label, index) => {
-    const rowY = distributionTop + 18 + distributionLineGap * index;
-    doc.text(label, col4X + 6, rowY);
-    doc.text("[ ]", col4X + col4Width - 22, rowY);
+    const rowY = labelBottom + rowStep * (index + 0.5) + 3;
+    doc.text(label, col4X + PAD_X, rowY);
+    doc.setDrawColor(BORDER);
+    doc.setLineWidth(0.5);
+    doc.rect(col4X + col4Width - PAD_X - checkboxSize, rowY - checkboxSize + 2, checkboxSize, checkboxSize);
   });
 
   return top + row1Height + row2Height + 22;
