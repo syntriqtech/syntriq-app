@@ -554,6 +554,7 @@ function drawApplicationSummary(doc: jsPDF, data: PayAppPdfData, startY: number)
       1: { cellWidth: valueColWidth, halign: "right" },
     },
     tableWidth,
+    pageBreak: "avoid",
     didParseCell: (cellData) => {
       const fill = summaryRows[cellData.row.index]?.fill;
       if (fill) {
@@ -565,15 +566,70 @@ function drawApplicationSummary(doc: jsPDF, data: PayAppPdfData, startY: number)
   return (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 16;
 }
 
+// Height drawSectionHeading itself consumes (text line, no gap before it —
+// callers add SECTION_GAP separately).
+const SECTION_HEADING_HEIGHT = 11;
+
+// Estimates the height a line-items table (see drawLineItemsTable) will need,
+// without drawing it, so a page-break decision can be made before starting
+// the section's heading.
+function estimateLineItemsTableHeight(doc: jsPDF, items: SOVLineItem[]): number {
+  if (items.length === 0) return 26;
+
+  const CELL_PAD_V = 8;
+  const LINE_H = 9 * 1.15;
+  const HEAD_LINES = 2; // most headers wrap to 2 lines, e.g. "Scheduled\nValue"
+  const headRowHeight = CELL_PAD_V + HEAD_LINES * (8.5 * 1.15);
+
+  const descColWidth = LINE_ITEM_COLUMN_WIDTHS[1] - 10; // cellPadding left+right
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  const bodyHeight = items.reduce((sum, item) => {
+    const lines = Math.max(1, doc.splitTextToSize(item.description || "—", descColWidth).length);
+    return sum + CELL_PAD_V + lines * LINE_H;
+  }, 0);
+
+  const footRowHeight = CELL_PAD_V + LINE_H;
+
+  return headRowHeight + bodyHeight + footRowHeight;
+}
+
+// Fixed row count in drawApplicationSummary, independent of job data.
+const APPLICATION_SUMMARY_ROW_COUNT = 7;
+
+function estimateApplicationSummaryHeight(): number {
+  const CELL_PAD_V = 7; // top 3.5 + bottom 3.5
+  const LINE_H = 9 * 1.15;
+  return APPLICATION_SUMMARY_ROW_COUNT * (CELL_PAD_V + LINE_H);
+}
+
+// If drawing `neededHeight` starting at `y` would run past the bottom
+// margin, starts a new page and returns its top margin instead of y.
+function ensureFitsOnPage(doc: jsPDF, y: number, neededHeight: number): number {
+  const bottomLimit = doc.internal.pageSize.getHeight() - MARGIN;
+  if (y + neededHeight > bottomLimit) {
+    doc.addPage();
+    return MARGIN;
+  }
+  return y;
+}
+
 function drawSOVScope(doc: jsPDF, data: PayAppPdfData, startY: number) {
   const SECTION_GAP = 8;
   let y = drawSectionHeading(doc, "Contract Line Items", startY);
   y = drawLineItemsTable(doc, data.lineItems, data.cwRate, data.smRate, y);
 
-  y = drawSectionHeading(doc, "Change Orders", y + SECTION_GAP);
+  // Never strand the "Change Orders" / "Application Summary" heading at the
+  // bottom of a page with its table pushed to the next one — measure the
+  // heading + table height against the remaining page space first.
+  const changeOrdersNeeded = SECTION_HEADING_HEIGHT + estimateLineItemsTableHeight(doc, data.changeOrders);
+  y = ensureFitsOnPage(doc, y + SECTION_GAP, changeOrdersNeeded);
+  y = drawSectionHeading(doc, "Change Orders", y);
   y = drawLineItemsTable(doc, data.changeOrders, data.cwRate, data.smRate, y);
 
-  y = drawSectionHeading(doc, "Application Summary", y + SECTION_GAP);
+  const summaryNeeded = SECTION_HEADING_HEIGHT + estimateApplicationSummaryHeight();
+  y = ensureFitsOnPage(doc, y + SECTION_GAP, summaryNeeded);
+  y = drawSectionHeading(doc, "Application Summary", y);
   y = drawApplicationSummary(doc, data, y);
 
   return y;
