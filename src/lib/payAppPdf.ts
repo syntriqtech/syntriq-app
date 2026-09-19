@@ -33,7 +33,12 @@ const MARGIN = 36;
 const LINE_ITEM_COLUMN_WIDTHS = [30, 130, 75, 75, 75, 75, 75, 55, 75, 55];
 
 function currency(value: number) {
-  return value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  return value.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function formatDate(value: string) {
