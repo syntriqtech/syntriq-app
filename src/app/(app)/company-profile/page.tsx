@@ -9,6 +9,7 @@ import {
   BillingFormTemplate,
   fetchBillingFormTemplates,
   createBillingFormTemplate,
+  replaceBillingFormTemplateFile,
   setBillingFormTemplateEnabled,
   deleteBillingFormTemplate,
   renameBillingFormTemplate,
@@ -73,6 +74,9 @@ export default function CompanyProfilePage() {
   const [renamingTemplateId, setRenamingTemplateId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [isSavingRename, setIsSavingRename] = useState(false);
+  const [replacingTemplateId, setReplacingTemplateId] = useState<string | null>(null);
+  const replaceFileTargetRef = useRef<BillingFormTemplate | null>(null);
+  const replaceFileInputRef = useRef<HTMLInputElement>(null);
   const [templateError, setTemplateError] = useState<string | null>(null);
   const templateInputRef = useRef<HTMLInputElement>(null);
 
@@ -163,6 +167,38 @@ export default function CompanyProfilePage() {
       setTemplateError(err instanceof Error ? err.message : "Could not delete this template.");
     } finally {
       setDeletingTemplateId(null);
+    }
+  }
+
+  function startReplacingFile(template: BillingFormTemplate) {
+    if (!template.filePath) return;
+    replaceFileTargetRef.current = template;
+    replaceFileInputRef.current?.click();
+  }
+
+  async function handleReplaceFile(file: File) {
+    const template = replaceFileTargetRef.current;
+    if (!template?.filePath) return;
+    setTemplateError(null);
+    const isXlsx = file.name.toLowerCase().endsWith(".xlsx");
+    if (!isXlsx) {
+      setTemplateError("Only .xlsx files are accepted.");
+      return;
+    }
+    if (file.size > MAX_TEMPLATE_BYTES) {
+      setTemplateError("File is too large — maximum 10 MB.");
+      return;
+    }
+    setReplacingTemplateId(template.id);
+    try {
+      const saved = await replaceBillingFormTemplateFile(template.id, template.filePath, file);
+      setTemplates((prev) => prev.map((t) => (t.id === saved.id ? saved : t)));
+    } catch (err) {
+      setTemplateError(err instanceof Error ? err.message : "Could not replace this template's file.");
+    } finally {
+      setReplacingTemplateId(null);
+      replaceFileTargetRef.current = null;
+      if (replaceFileInputRef.current) replaceFileInputRef.current.value = "";
     }
   }
 
@@ -506,6 +542,14 @@ export default function CompanyProfilePage() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => startReplacingFile(template)}
+                        disabled={replacingTemplateId === template.id}
+                        className="text-xs font-semibold text-teal hover:underline disabled:opacity-50"
+                      >
+                        {replacingTemplateId === template.id ? "Replacing…" : "Replace file"}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleDeleteTemplate(template)}
                         disabled={deletingTemplateId === template.id}
                         className="text-xs font-semibold text-red-500 hover:underline disabled:opacity-50"
@@ -519,6 +563,17 @@ export default function CompanyProfilePage() {
             })}
           </div>
         )}
+
+        <input
+          ref={replaceFileInputRef}
+          type="file"
+          accept=".xlsx"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleReplaceFile(file);
+          }}
+        />
 
         {isOwner && (
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">

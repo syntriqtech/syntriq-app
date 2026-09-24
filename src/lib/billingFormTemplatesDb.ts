@@ -105,6 +105,33 @@ export async function renameBillingFormTemplate(templateId: string, name: string
   return rowToTemplate(data);
 }
 
+// Swaps just the file on an existing template row (e.g. a print-formatting
+// fix to the master workbook itself) — unlike createBillingFormTemplate,
+// this keeps the row's id/name/field_mapping/enabled exactly as they are,
+// since re-uploading via a brand-new row would silently lose whatever
+// field_mapping was already hand-configured for it.
+export async function replaceBillingFormTemplateFile(templateId: string, filePath: string, file: File): Promise<BillingFormTemplate> {
+  const supabase = createClient();
+  const buffer = await file.arrayBuffer();
+
+  const { error: uploadError } = await supabase.storage
+    .from(TEMPLATE_BUCKET)
+    .upload(filePath, buffer, {
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      upsert: true,
+    });
+  if (uploadError) throw new Error(uploadError.message);
+
+  const { data, error } = await supabase
+    .from("billing_form_templates")
+    .update({ file_name: file.name, updated_at: new Date().toISOString() })
+    .eq("id", templateId)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return rowToTemplate(data);
+}
+
 // Rejected by RLS unless the caller is the org owner AND field_mapping is
 // already set — the mapping can only be set by hand (see chat/plan), so this
 // double-checks client-side too rather than letting the UI offer a toggle

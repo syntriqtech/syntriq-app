@@ -229,6 +229,7 @@ export default function DownloadPackagePage() {
         },
         job: {
           name: job.jobName,
+          jobNumber: job.jobNumber,
           poNumber: job.poNumber ?? "",
           street: jobStreet,
           cityStateZip: jobCityStateZip,

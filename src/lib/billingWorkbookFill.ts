@@ -29,6 +29,7 @@ export type BillingWorkbookData = {
   };
   job: {
     name: string;
+    jobNumber: string;
     poNumber: string;
     street: string;
     cityStateZip: string;
