@@ -38,8 +38,8 @@ export default function ContractImportModal({ onFile, onClose, isImporting }: Pr
           <div>
             <h2 className="text-lg font-bold text-navy">Import Contract (AI)</h2>
             <p className="mt-0.5 text-sm text-gray-500">
-              Upload the signed contract as a PDF or photo and Syntriq will read it with AI to
-              pre-fill this form.
+              Upload the signed contract as a PDF or photo, or your billing workbook as an Excel
+              file, and Syntriq will read it with AI to pre-fill this form.
             </p>
           </div>
           <button
@@ -56,7 +56,7 @@ export default function ContractImportModal({ onFile, onClose, isImporting }: Pr
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.jpg,.jpeg,.png"
+            accept=".pdf,.jpg,.jpeg,.png,.xlsx"
             className="hidden"
             onChange={(e) => {
               handleFiles(e.target.files);
@@ -127,7 +127,7 @@ export default function ContractImportModal({ onFile, onClose, isImporting }: Pr
                 <p className="text-sm text-gray-500">
                   or <span className="font-semibold text-teal">browse</span> to choose a file
                 </p>
-                <p className="text-xs text-gray-400">.pdf, .jpg, or .png</p>
+                <p className="text-xs text-gray-400">.pdf, .jpg, .png, or .xlsx</p>
               </>
             )}
           </div>
