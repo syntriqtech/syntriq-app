@@ -8,6 +8,13 @@ export type GeneralContractor = {
   paymentTerms: string;
   defaultRetentionPct: number | null;
   billingPlatform: string;
+  // Optional: only needed by orgs with a Custom Billing Forms template
+  // (see supabase/064_custom_billing_forms.sql).
+  phone: string;
+  fax: string;
+  pmName: string;
+  pmEmail: string;
+  pmMobile: string;
 };
 
 type GcRow = {
@@ -17,6 +24,11 @@ type GcRow = {
   payment_terms: string;
   default_retention_pct: number | null;
   billing_platform: string;
+  phone: string | null;
+  fax: string | null;
+  pm_name: string | null;
+  pm_email: string | null;
+  pm_mobile: string | null;
 };
 
 function rowToGc(row: GcRow): GeneralContractor {
@@ -27,6 +39,11 @@ function rowToGc(row: GcRow): GeneralContractor {
     paymentTerms: row.payment_terms ?? "",
     defaultRetentionPct: row.default_retention_pct != null ? Number(row.default_retention_pct) : null,
     billingPlatform: row.billing_platform ?? "",
+    phone: row.phone ?? "",
+    fax: row.fax ?? "",
+    pmName: row.pm_name ?? "",
+    pmEmail: row.pm_email ?? "",
+    pmMobile: row.pm_mobile ?? "",
   };
 }
 
@@ -46,6 +63,11 @@ export type NewGeneralContractor = {
   paymentTerms?: string;
   defaultRetentionPct?: number | null;
   billingPlatform?: string;
+  phone?: string;
+  fax?: string;
+  pmName?: string;
+  pmEmail?: string;
+  pmMobile?: string;
 };
 
 export async function createGeneralContractor(gc: NewGeneralContractor): Promise<GeneralContractor> {
@@ -65,6 +87,11 @@ export async function createGeneralContractor(gc: NewGeneralContractor): Promise
       payment_terms: gc.paymentTerms?.trim() ?? "",
       default_retention_pct: gc.defaultRetentionPct ?? null,
       billing_platform: gc.billingPlatform?.trim() ?? "",
+      phone: gc.phone?.trim() ?? "",
+      fax: gc.fax?.trim() ?? "",
+      pm_name: gc.pmName?.trim() ?? "",
+      pm_email: gc.pmEmail?.trim() ?? "",
+      pm_mobile: gc.pmMobile?.trim() ?? "",
     })
     .select()
     .single();
@@ -78,6 +105,11 @@ export type UpdateGeneralContractor = {
   paymentTerms?: string;
   defaultRetentionPct?: number | null;
   billingPlatform?: string;
+  phone?: string;
+  fax?: string;
+  pmName?: string;
+  pmEmail?: string;
+  pmMobile?: string;
 };
 
 // Updates the canonical GC record only — does not touch any job's own
@@ -99,6 +131,11 @@ export async function updateGeneralContractor(id: string, gc: UpdateGeneralContr
       payment_terms: gc.paymentTerms?.trim() ?? "",
       default_retention_pct: gc.defaultRetentionPct ?? null,
       billing_platform: gc.billingPlatform?.trim() ?? "",
+      phone: gc.phone?.trim() ?? "",
+      fax: gc.fax?.trim() ?? "",
+      pm_name: gc.pmName?.trim() ?? "",
+      pm_email: gc.pmEmail?.trim() ?? "",
+      pm_mobile: gc.pmMobile?.trim() ?? "",
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)

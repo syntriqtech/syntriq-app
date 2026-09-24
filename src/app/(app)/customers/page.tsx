@@ -25,6 +25,11 @@ type FormFields = {
   paymentTerms: string;
   defaultRetentionPct: string;
   billingPlatform: string;
+  phone: string;
+  fax: string;
+  pmName: string;
+  pmEmail: string;
+  pmMobile: string;
 };
 
 const EMPTY_FORM: FormFields = {
@@ -33,6 +38,11 @@ const EMPTY_FORM: FormFields = {
   paymentTerms: "",
   defaultRetentionPct: "",
   billingPlatform: "",
+  phone: "",
+  fax: "",
+  pmName: "",
+  pmEmail: "",
+  pmMobile: "",
 };
 
 type DeleteFlowState = {
@@ -87,6 +97,11 @@ export default function CustomersPage() {
       paymentTerms: gc.paymentTerms,
       defaultRetentionPct: gc.defaultRetentionPct != null ? String(gc.defaultRetentionPct) : "",
       billingPlatform: gc.billingPlatform,
+      phone: gc.phone,
+      fax: gc.fax,
+      pmName: gc.pmName,
+      pmEmail: gc.pmEmail,
+      pmMobile: gc.pmMobile,
     });
     setFormError(null);
     setFormModal({ mode: "edit", gc });
@@ -111,6 +126,11 @@ export default function CustomersPage() {
       paymentTerms: formFields.paymentTerms,
       defaultRetentionPct: formFields.defaultRetentionPct.trim() !== "" ? Number(formFields.defaultRetentionPct) : null,
       billingPlatform: formFields.billingPlatform,
+      phone: formFields.phone,
+      fax: formFields.fax,
+      pmName: formFields.pmName,
+      pmEmail: formFields.pmEmail,
+      pmMobile: formFields.pmMobile,
     };
     try {
       if (formModal.mode === "create") {
@@ -322,6 +342,47 @@ export default function CustomersPage() {
                 placeholder="e.g. Procore, GCPay, Textura"
                 value={formFields.billingPlatform}
                 onChange={(e) => setFormFields((prev) => ({ ...prev, billingPlatform: e.target.value }))}
+              />
+
+              <div>
+                <h3 className="text-sm font-semibold text-gray-500">Contact info (optional)</h3>
+                <p className="mt-1 text-xs text-gray-400">
+                  Only needed for an org with a Custom Billing Forms template enabled.
+                </p>
+              </div>
+              <TextField
+                label="Phone"
+                id="gcPhone"
+                type="tel"
+                value={formFields.phone}
+                onChange={(e) => setFormFields((prev) => ({ ...prev, phone: e.target.value }))}
+              />
+              <TextField
+                label="Fax"
+                id="gcFax"
+                type="tel"
+                value={formFields.fax}
+                onChange={(e) => setFormFields((prev) => ({ ...prev, fax: e.target.value }))}
+              />
+              <TextField
+                label="PM name"
+                id="gcPmName"
+                value={formFields.pmName}
+                onChange={(e) => setFormFields((prev) => ({ ...prev, pmName: e.target.value }))}
+              />
+              <TextField
+                label="PM email"
+                id="gcPmEmail"
+                type="email"
+                value={formFields.pmEmail}
+                onChange={(e) => setFormFields((prev) => ({ ...prev, pmEmail: e.target.value }))}
+              />
+              <TextField
+                label="PM mobile"
+                id="gcPmMobile"
+                type="tel"
+                value={formFields.pmMobile}
+                onChange={(e) => setFormFields((prev) => ({ ...prev, pmMobile: e.target.value }))}
               />
 
               {formModal.mode === "edit" && (

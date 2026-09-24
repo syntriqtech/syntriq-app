@@ -9,10 +9,14 @@ import { fetchUserProfile, saveUserSignature, formatSignerLine } from "@/lib/use
 import { computeLine, sumLines, previousCertificates } from "@/lib/payAppMath";
 import Link from "next/link";
 import { exportBillingPackage } from "@/lib/billingPackagePdf";
+import { splitAddress } from "@/lib/payAppPdf";
 import { loadLogoForPdf, LogoData } from "@/lib/invoiceCoverPdf";
 import { useCompanyProfile } from "@/hooks/useCompanyProfile";
 import { findPayApplication, savePayApplicationPdf } from "@/lib/payApplicationsDb";
 import { LienWaiverKind } from "@/lib/lienWaiverPdf";
+import { BillingFormTemplate, fetchBillingFormTemplates, downloadBillingFormTemplateFile } from "@/lib/billingFormTemplatesDb";
+import { BillingWorkbookMapping, fillBillingWorkbook } from "@/lib/billingWorkbookFill";
+import { fetchGeneralContractors, GeneralContractor } from "@/lib/generalContractorsDb";
 import TextField from "@/components/TextField";
 import Button from "@/components/Button";
 import AdoptSignatureModal from "@/components/AdoptSignatureModal";
@@ -69,6 +73,22 @@ export default function DownloadPackagePage() {
   // generic list. Null until a pay application actually exists for this
   // combination (e.g. before it's ever been saved/billed).
   const [currentPayAppId, setCurrentPayAppId] = useState<string | null>(null);
+
+  // Custom Billing Forms (supabase/064 + 065) — a library of templates per
+  // org; empty for every org that hasn't added one, in which case nothing
+  // below changes. "Ready" means an owner has both uploaded the file and
+  // finished field-mapping setup for it.
+  const [billingFormTemplates, setBillingFormTemplates] = useState<BillingFormTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [gcs, setGcs] = useState<GeneralContractor[]>([]);
+  const readyTemplates = billingFormTemplates.filter((t) => t.enabled && t.filePath && t.fieldMapping);
+  const selectedTemplate = readyTemplates.find((t) => t.id === selectedTemplateId) ?? null;
+  const isCustomMode = selectedTemplate !== null;
+
+  useEffect(() => {
+    fetchBillingFormTemplates().then(setBillingFormTemplates).catch(() => {});
+    fetchGeneralContractors().then(setGcs).catch(() => {});
+  }, []);
 
   useEffect(() => {
     getContractorInfo().then(setContractor);
@@ -182,10 +202,73 @@ export default function DownloadPackagePage() {
     setSelectedWaivers((prev) => (prev.includes(kind) ? prev.filter((k) => k !== kind) : [...prev, kind]));
   }
 
+  // Custom Billing Forms path: fills the selected Excel template instead of
+  // the default PDF pipeline, and just downloads it directly — no
+  // signature, no lien waivers (not mapped yet), no saved-PDF record.
+  async function handleDownloadCustomWorkbook() {
+    if (!job || !selectedTemplate?.filePath || !selectedTemplate?.fieldMapping) return;
+    const gc = gcs.find((g) => g.id === job.gcId);
+    const [gcStreet, gcCityStateZip] = splitAddress(gc?.billingAddress ?? job.customerAddress);
+    const [jobStreet, jobCityStateZip] = splitAddress(job.jobAddress);
+
+    const templateBuffer = await downloadBillingFormTemplateFile(selectedTemplate.filePath);
+    const filled = await fillBillingWorkbook(
+      templateBuffer,
+      selectedTemplate.fieldMapping as unknown as BillingWorkbookMapping,
+      {
+        gc: {
+          name: gc?.name ?? job.customer,
+          projectNumber: job.architectProjectNumber ?? "",
+          street: gcStreet,
+          cityStateZip: gcCityStateZip,
+          phone: gc?.phone ?? "",
+          fax: gc?.fax ?? "",
+          pmName: gc?.pmName ?? "",
+          email: gc?.pmEmail ?? "",
+          pmMobile: gc?.pmMobile ?? "",
+        },
+        job: {
+          name: job.jobName,
+          poNumber: job.poNumber ?? "",
+          street: jobStreet,
+          cityStateZip: jobCityStateZip,
+          contractValue: job.contractValue,
+          ohAndPPct: job.ohAndPPct ?? null,
+          ctiPmName: job.ctiPm,
+          retentionRateCW: job.retentionRateCW,
+          contractRetentionPctPrevious: job.contractRetentionPctPrevious ?? null,
+          coRetentionPct: job.coRetentionPct ?? null,
+          coRetentionPctPrevious: job.coRetentionPctPrevious ?? null,
+          ownerName: job.owner,
+        },
+        company: {
+          contactEmail: profile?.contactEmail ?? "",
+          contactPhone: profile?.contactPhone ?? "",
+        },
+        payApp: { applicationNumber, applicationDate, periodTo },
+        contractLines: lineItems,
+        changeOrders,
+      }
+    );
+
+    const blob = new Blob([filled], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${job.jobNumber}-billing-package-app${applicationNumber}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function handleDownload() {
     if (!job) return;
     setIsGenerating(true);
     try {
+      if (isCustomMode) {
+        await handleDownloadCustomWorkbook();
+        return;
+      }
+
       let logo: LogoData | undefined;
       if (profile?.logoUrl) {
         logo = (await loadLogoForPdf(profile.logoUrl)) ?? undefined;
@@ -297,7 +380,9 @@ export default function DownloadPackagePage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [savePromptOpen, saveState]);
 
-  const canDownload = Boolean(job) && Boolean(signatureDataUrl) && claimantTitle.trim().length > 0;
+  const canDownload = isCustomMode
+    ? Boolean(job)
+    : Boolean(job) && Boolean(signatureDataUrl) && claimantTitle.trim().length > 0;
 
   // Deep-link straight to this job's pay application when one exists (same
   // route pattern used from the dashboard, jobs page, and pay-applications
@@ -325,6 +410,26 @@ export default function DownloadPackagePage() {
       <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
         <h2 className="text-sm font-semibold text-gray-500">1. Job & application</h2>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {readyTemplates.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="billingFormSelect" className="text-sm font-medium text-navy">
+                Billing form
+              </label>
+              <select
+                id="billingFormSelect"
+                value={selectedTemplateId}
+                onChange={(e) => setSelectedTemplateId(e.target.value)}
+                className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-navy focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"
+              >
+                <option value="">Default (Syntriq PDF package)</option>
+                {readyTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <label htmlFor="jobSelect" className="text-sm font-medium text-navy">
               Job
@@ -383,74 +488,87 @@ export default function DownloadPackagePage() {
         </p>
       </div>
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-        <h2 className="text-sm font-semibold text-gray-500">2. Documents to include</h2>
-        <p className="mt-1 text-sm text-gray-500">The pay application packet (G702 + SOV) and invoice cover are always included. Choose which lien waiver(s) to add.</p>
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {WAIVER_OPTIONS.map((option) => (
-            <label key={option.kind} className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-navy">
-              <input
-                type="checkbox"
-                checked={selectedWaivers.includes(option.kind)}
-                onChange={() => toggleWaiver(option.kind)}
-                className="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal/30"
-              />
-              {option.label}
-            </label>
-          ))}
+      {isCustomMode ? (
+        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+          <h2 className="text-sm font-semibold text-gray-500">2. Custom billing form</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            This will fill <span className="font-medium text-navy">{selectedTemplate?.name}</span> (
+            {selectedTemplate?.fileName}) with this job&apos;s data instead of the default PDF package. Lien
+            waivers and signatures aren&apos;t part of this yet.
+          </p>
         </div>
-      </div>
+      ) : (
+        <>
+          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+            <h2 className="text-sm font-semibold text-gray-500">2. Documents to include</h2>
+            <p className="mt-1 text-sm text-gray-500">The pay application packet (G702 + SOV) and invoice cover are always included. Choose which lien waiver(s) to add.</p>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {WAIVER_OPTIONS.map((option) => (
+                <label key={option.kind} className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-navy">
+                  <input
+                    type="checkbox"
+                    checked={selectedWaivers.includes(option.kind)}
+                    onChange={() => toggleWaiver(option.kind)}
+                    className="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal/30"
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </div>
+          </div>
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-        <h2 className="text-sm font-semibold text-gray-500">3. Sign</h2>
-        <p className="mt-1 text-sm text-gray-500">
-          This signature is stamped on the G702 contractor line and every lien waiver in the package.
-        </p>
-        <div className="mt-4 flex flex-col gap-4">
-          <TextField
-            label="Signer name & title"
-            id="claimantTitle"
-            placeholder="e.g. Jane Doe, Owner"
-            value={claimantTitle}
-            onChange={(e) => setClaimantTitle(e.target.value)}
-          />
-          {signatureDataUrl ? (
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium text-navy">Signature</p>
-              <div className="flex items-center gap-4 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={signatureDataUrl} alt="Adopted signature" className="h-12 object-contain" />
-                <button
-                  type="button"
-                  onClick={() => setSigModalOpen(true)}
-                  className="text-xs font-medium text-teal hover:underline"
-                >
-                  Change signature
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSignatureDataUrl(null)}
-                  className="text-xs font-medium text-gray-400 hover:text-red-500"
-                >
-                  Remove
-                </button>
-              </div>
+          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+            <h2 className="text-sm font-semibold text-gray-500">3. Sign</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              This signature is stamped on the G702 contractor line and every lien waiver in the package.
+            </p>
+            <div className="mt-4 flex flex-col gap-4">
+              <TextField
+                label="Signer name & title"
+                id="claimantTitle"
+                placeholder="e.g. Jane Doe, Owner"
+                value={claimantTitle}
+                onChange={(e) => setClaimantTitle(e.target.value)}
+              />
+              {signatureDataUrl ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-medium text-navy">Signature</p>
+                  <div className="flex items-center gap-4 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={signatureDataUrl} alt="Adopted signature" className="h-12 object-contain" />
+                    <button
+                      type="button"
+                      onClick={() => setSigModalOpen(true)}
+                      className="text-xs font-medium text-teal hover:underline"
+                    >
+                      Change signature
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSignatureDataUrl(null)}
+                      className="text-xs font-medium text-gray-400 hover:text-red-500"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-sm font-medium text-navy">Signature</p>
+                  <button
+                    type="button"
+                    onClick={() => setSigModalOpen(true)}
+                    className="flex h-20 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-teal/40 bg-teal/5 text-sm font-medium text-teal hover:border-teal hover:bg-teal/10 transition-colors"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                    Click to adopt your signature
+                  </button>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="flex flex-col gap-1.5">
-              <p className="text-sm font-medium text-navy">Signature</p>
-              <button
-                type="button"
-                onClick={() => setSigModalOpen(true)}
-                className="flex h-20 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-teal/40 bg-teal/5 text-sm font-medium text-teal hover:border-teal hover:bg-teal/10 transition-colors"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                Click to adopt your signature
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+          </div>
+        </>
+      )}
 
       <AdoptSignatureModal
         open={sigModalOpen}
@@ -480,7 +598,9 @@ export default function DownloadPackagePage() {
         </Link>
       </div>
       {!canDownload && (
-        <p className="text-xs text-gray-500">Add a signer name/title and sign above to enable download.</p>
+        <p className="text-xs text-gray-500">
+          {isCustomMode ? "Select a job to enable download." : "Add a signer name/title and sign above to enable download."}
+        </p>
       )}
 
       {/* ── Save prompt — centered modal, matching JobCreatedModal / DownloadPackagePromptModal ── */}

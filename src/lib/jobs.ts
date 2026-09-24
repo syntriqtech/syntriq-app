@@ -34,6 +34,11 @@ type JobRow = {
   billing_checkin_month: string;
   billing_platform: string;
   certified_payroll: boolean;
+  po_number: string | null;
+  oh_and_p_pct: number | null;
+  co_retention_pct: number | null;
+  co_retention_pct_previous: number | null;
+  contract_retention_pct_previous: number | null;
 };
 
 function rowToJob(row: JobRow): DbJob {
@@ -65,6 +70,11 @@ function rowToJob(row: JobRow): DbJob {
     billingCheckinMonth: row.billing_checkin_month ?? "",
     billingPlatform: row.billing_platform ?? "",
     certifiedPayroll: row.certified_payroll ?? false,
+    poNumber: row.po_number ?? "",
+    ohAndPPct: row.oh_and_p_pct != null ? Number(row.oh_and_p_pct) : null,
+    coRetentionPct: row.co_retention_pct != null ? Number(row.co_retention_pct) : null,
+    coRetentionPctPrevious: row.co_retention_pct_previous != null ? Number(row.co_retention_pct_previous) : null,
+    contractRetentionPctPrevious: row.contract_retention_pct_previous != null ? Number(row.contract_retention_pct_previous) : null,
   };
 }
 
@@ -234,6 +244,11 @@ export async function createJob(job: JobSetup): Promise<DbJob> {
       billing_checkin_month: job.billingCheckinMonth,
       billing_platform: job.billingPlatform,
       certified_payroll: job.certifiedPayroll,
+      po_number: job.poNumber || null,
+      oh_and_p_pct: job.ohAndPPct ?? null,
+      co_retention_pct: job.coRetentionPct ?? null,
+      co_retention_pct_previous: job.coRetentionPctPrevious ?? null,
+      contract_retention_pct_previous: job.contractRetentionPctPrevious ?? null,
     })
     .select()
     .single();
@@ -282,6 +297,11 @@ export async function updateJob(id: string, job: JobSetup): Promise<DbJob> {
       billing_checkin_month: job.billingCheckinMonth,
       billing_platform: job.billingPlatform,
       certified_payroll: job.certifiedPayroll,
+      po_number: job.poNumber || null,
+      oh_and_p_pct: job.ohAndPPct ?? null,
+      co_retention_pct: job.coRetentionPct ?? null,
+      co_retention_pct_previous: job.coRetentionPctPrevious ?? null,
+      contract_retention_pct_previous: job.contractRetentionPctPrevious ?? null,
     })
     .eq("id", id)
     .select()

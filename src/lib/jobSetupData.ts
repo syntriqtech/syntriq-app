@@ -24,6 +24,14 @@ export type JobSetup = {
   billingCheckinMonth: string;
   billingPlatform: string;
   certifiedPayroll: boolean;
+  // Optional: only needed by orgs with a Custom Billing Forms template
+  // (see supabase/064_custom_billing_forms.sql) — unused sample entries
+  // below are left as-is rather than backfilled.
+  poNumber?: string;
+  ohAndPPct?: number | null;
+  coRetentionPct?: number | null;
+  coRetentionPctPrevious?: number | null;
+  contractRetentionPctPrevious?: number | null;
 };
 
 export const jobSetups: JobSetup[] = [

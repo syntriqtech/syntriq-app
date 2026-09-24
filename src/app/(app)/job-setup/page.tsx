@@ -58,6 +58,11 @@ const EMPTY_FORM = {
   billingCheckinMonth: new Date().toISOString().slice(0, 7),
   billingPlatform: "",
   certifiedPayroll: "no",
+  poNumber: "",
+  ohAndPPct: "",
+  coRetentionPct: "",
+  coRetentionPctPrevious: "",
+  contractRetentionPctPrevious: "",
 };
 
 function jobToForm(job: DbJob): typeof EMPTY_FORM {
@@ -87,6 +92,11 @@ function jobToForm(job: DbJob): typeof EMPTY_FORM {
     billingCheckinMonth: job.billingCheckinMonth ?? new Date().toISOString().slice(0, 7),
     billingPlatform: job.billingPlatform ?? "",
     certifiedPayroll: job.certifiedPayroll ? "yes" : "no",
+    poNumber: job.poNumber ?? "",
+    ohAndPPct: job.ohAndPPct != null ? String(job.ohAndPPct) : "",
+    coRetentionPct: job.coRetentionPct != null ? String(job.coRetentionPct) : "",
+    coRetentionPctPrevious: job.coRetentionPctPrevious != null ? String(job.coRetentionPctPrevious) : "",
+    contractRetentionPctPrevious: job.contractRetentionPctPrevious != null ? String(job.contractRetentionPctPrevious) : "",
   };
 }
 
@@ -342,6 +352,11 @@ export default function JobSetupPage() {
       billingCheckinMonth: form.billingCheckinMonth || new Date().toISOString().slice(0, 7),
       billingPlatform: form.billingPlatform.trim(),
       certifiedPayroll: form.certifiedPayroll === "yes",
+      poNumber: form.poNumber.trim(),
+      ohAndPPct: form.ohAndPPct !== "" ? Number(form.ohAndPPct) : null,
+      coRetentionPct: form.coRetentionPct !== "" ? Number(form.coRetentionPct) : null,
+      coRetentionPctPrevious: form.coRetentionPctPrevious !== "" ? Number(form.coRetentionPctPrevious) : null,
+      contractRetentionPctPrevious: form.contractRetentionPctPrevious !== "" ? Number(form.contractRetentionPctPrevious) : null,
     };
 
     setIsSaving(true);
@@ -642,6 +657,59 @@ export default function JobSetupPage() {
             ))}
           </datalist>
         </div>
+
+        <div className="sm:col-span-2">
+          <h3 className="text-sm font-semibold text-gray-500">Custom billing forms (optional)</h3>
+          <p className="mt-1 text-xs text-gray-400">
+            Only needed for an org with a Custom Billing Forms template enabled — see Company Profile.
+          </p>
+        </div>
+        <TextField
+          label="PO number"
+          id="poNumber"
+          value={form.poNumber}
+          onChange={(e) => handleChange("poNumber", e.target.value)}
+        />
+        <TextField
+          label="OH&P (%)"
+          id="ohAndPPct"
+          type="number"
+          min="0"
+          max="100"
+          step="0.01"
+          value={form.ohAndPPct}
+          onChange={(e) => handleChange("ohAndPPct", e.target.value)}
+        />
+        <TextField
+          label="Change order retention rate — current (%)"
+          id="coRetentionPct"
+          type="number"
+          min="0"
+          max="100"
+          step="0.01"
+          value={form.coRetentionPct}
+          onChange={(e) => handleChange("coRetentionPct", e.target.value)}
+        />
+        <TextField
+          label="Change order retention rate — previous (%)"
+          id="coRetentionPctPrevious"
+          type="number"
+          min="0"
+          max="100"
+          step="0.01"
+          value={form.coRetentionPctPrevious}
+          onChange={(e) => handleChange("coRetentionPctPrevious", e.target.value)}
+        />
+        <TextField
+          label="Contract retention rate — previous (%)"
+          id="contractRetentionPctPrevious"
+          type="number"
+          min="0"
+          max="100"
+          step="0.01"
+          value={form.contractRetentionPctPrevious}
+          onChange={(e) => handleChange("contractRetentionPctPrevious", e.target.value)}
+        />
 
         {error && <p className="text-sm text-red-600 sm:col-span-2">{error}</p>}
 

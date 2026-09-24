@@ -120,7 +120,7 @@ function drawInfoBoxes(
 }
 
 // Splits "Street, City, ST 00000" into ["Street", "City, ST 00000"].
-function splitAddress(address: string): [string, string] {
+export function splitAddress(address: string): [string, string] {
   const match = address.match(/^(.*),\s*([^,]+,\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?)$/);
   if (match) return [match[1].trim(), match[2].trim()];
   return [address, ""];

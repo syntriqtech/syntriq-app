@@ -5,11 +5,20 @@ import { useCompanyProfile } from "@/hooks/useCompanyProfile";
 import { saveCompanyProfile, saveCompanyLogo, removeCompanyLogo } from "@/lib/companyProfileDb";
 import { getCurrentUserContext } from "@/lib/currentUserContext";
 import { fetchOrganizationMembers } from "@/lib/organizationMembersDb";
+import {
+  BillingFormTemplate,
+  fetchBillingFormTemplates,
+  createBillingFormTemplate,
+  setBillingFormTemplateEnabled,
+  deleteBillingFormTemplate,
+  renameBillingFormTemplate,
+} from "@/lib/billingFormTemplatesDb";
 import TextField from "@/components/TextField";
 import Button from "@/components/Button";
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024; // 5 MB
 const ACCEPTED_TYPES = ["image/png", "image/jpeg"];
+const MAX_TEMPLATE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export default function CompanyProfilePage() {
   const { profile, isLoading, error: loadError } = useCompanyProfile();
@@ -51,6 +60,111 @@ export default function CompanyProfilePage() {
   const [isRemovingLogo, setIsRemovingLogo] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+
+  // Custom Billing Forms (supabase/064 + 065) — a library of templates per
+  // org (e.g. CTI's own form AND a GC-specific one), picked per job on
+  // Download Package. Empty by default — no effect on billing generation
+  // for any org that hasn't added one.
+  const [templates, setTemplates] = useState<BillingFormTemplate[]>([]);
+  const [newTemplateName, setNewTemplateName] = useState("");
+  const [isUploadingTemplate, setIsUploadingTemplate] = useState(false);
+  const [togglingTemplateId, setTogglingTemplateId] = useState<string | null>(null);
+  const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
+  const [renamingTemplateId, setRenamingTemplateId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [isSavingRename, setIsSavingRename] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  const templateInputRef = useRef<HTMLInputElement>(null);
+
+  function loadTemplates() {
+    fetchBillingFormTemplates().then(setTemplates).catch(() => {});
+  }
+
+  useEffect(loadTemplates, []);
+
+  async function handleTemplateFile(file: File) {
+    setTemplateError(null);
+    if (!newTemplateName.trim()) {
+      setTemplateError("Give the template a name first (e.g. \"CTI Billing Form\").");
+      return;
+    }
+    const isXlsx = file.name.toLowerCase().endsWith(".xlsx");
+    if (!isXlsx) {
+      setTemplateError("Only .xlsx files are accepted.");
+      return;
+    }
+    if (file.size > MAX_TEMPLATE_BYTES) {
+      setTemplateError("File is too large — maximum 10 MB.");
+      return;
+    }
+    setIsUploadingTemplate(true);
+    try {
+      const saved = await createBillingFormTemplate(newTemplateName, file);
+      setTemplates((prev) => [...prev, saved]);
+      setNewTemplateName("");
+    } catch (err) {
+      setTemplateError(err instanceof Error ? err.message : "Could not upload template.");
+    } finally {
+      setIsUploadingTemplate(false);
+      if (templateInputRef.current) templateInputRef.current.value = "";
+    }
+  }
+
+  async function handleToggleTemplateEnabled(template: BillingFormTemplate) {
+    setTemplateError(null);
+    setTogglingTemplateId(template.id);
+    try {
+      const saved = await setBillingFormTemplateEnabled(template.id, !template.enabled);
+      setTemplates((prev) => prev.map((t) => (t.id === saved.id ? saved : t)));
+    } catch (err) {
+      setTemplateError(err instanceof Error ? err.message : "Could not update this template.");
+    } finally {
+      setTogglingTemplateId(null);
+    }
+  }
+
+  function startRenaming(template: BillingFormTemplate) {
+    setTemplateError(null);
+    setRenamingTemplateId(template.id);
+    setRenameDraft(template.name);
+  }
+
+  function cancelRenaming() {
+    setRenamingTemplateId(null);
+    setRenameDraft("");
+  }
+
+  async function handleSaveRename(template: BillingFormTemplate) {
+    if (!renameDraft.trim() || renameDraft.trim() === template.name) {
+      cancelRenaming();
+      return;
+    }
+    setTemplateError(null);
+    setIsSavingRename(true);
+    try {
+      const saved = await renameBillingFormTemplate(template.id, renameDraft);
+      setTemplates((prev) => prev.map((t) => (t.id === saved.id ? saved : t)));
+      cancelRenaming();
+    } catch (err) {
+      setTemplateError(err instanceof Error ? err.message : "Could not rename this template.");
+    } finally {
+      setIsSavingRename(false);
+    }
+  }
+
+  async function handleDeleteTemplate(template: BillingFormTemplate) {
+    if (!confirm(`Delete "${template.name}"? This can't be undone.`)) return;
+    setTemplateError(null);
+    setDeletingTemplateId(template.id);
+    try {
+      await deleteBillingFormTemplate(template.id, template.filePath);
+      setTemplates((prev) => prev.filter((t) => t.id !== template.id));
+    } catch (err) {
+      setTemplateError(err instanceof Error ? err.message : "Could not delete this template.");
+    } finally {
+      setDeletingTemplateId(null);
+    }
+  }
 
   useEffect(() => {
     if (profile) {
@@ -315,6 +429,137 @@ export default function CompanyProfilePage() {
         </div>
 
         {logoError && <p className="mt-3 text-sm text-red-600">{logoError}</p>}
+      </div>
+
+      {/* Custom Billing Forms section */}
+      <div className="rounded-2xl border border-gray-100 bg-white p-6">
+        <h2 className="text-base font-bold text-navy">Custom Billing Forms</h2>
+        <p className="mt-1 text-sm text-gray-500">
+          Upload your own Excel billing forms (e.g. your own billing form, or a GC-specific one) and pick which
+          one to use each time you bill a job, on Download Package — instead of the default pay application package.
+        </p>
+
+        {templates.length > 0 && (
+          <div className="mt-4 flex flex-col divide-y divide-gray-100 rounded-xl border border-gray-100">
+            {templates.map((template) => {
+              const isReady = Boolean(template.filePath && template.fieldMapping);
+              return (
+                <div key={template.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    {renamingTemplateId === template.id ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          autoFocus
+                          type="text"
+                          value={renameDraft}
+                          onChange={(e) => setRenameDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveRename(template);
+                            if (e.key === "Escape") cancelRenaming();
+                          }}
+                          disabled={isSavingRename}
+                          className="rounded-lg border border-gray-200 px-2 py-1 text-sm font-semibold text-navy focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveRename(template)}
+                          disabled={isSavingRename}
+                          className="text-xs font-semibold text-teal hover:underline disabled:opacity-50"
+                        >
+                          {isSavingRename ? "Saving…" : "Save"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelRenaming}
+                          disabled={isSavingRename}
+                          className="text-xs font-semibold text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-sm font-semibold text-navy">{template.name}</p>
+                    )}
+                    <p className="text-xs text-gray-500">
+                      {template.fileName}
+                      {!isReady && " — awaiting field-mapping setup"}
+                    </p>
+                  </div>
+                  {isOwner && renamingTemplateId !== template.id && (
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 text-sm text-navy">
+                        <input
+                          type="checkbox"
+                          checked={template.enabled}
+                          disabled={togglingTemplateId === template.id || !isReady}
+                          onChange={() => handleToggleTemplateEnabled(template)}
+                          className="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal/30"
+                        />
+                        Available on Download Package
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => startRenaming(template)}
+                        className="text-xs font-semibold text-teal hover:underline"
+                      >
+                        Rename
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTemplate(template)}
+                        disabled={deletingTemplateId === template.id}
+                        className="text-xs font-semibold text-red-500 hover:underline disabled:opacity-50"
+                      >
+                        {deletingTemplateId === template.id ? "Deleting…" : "Delete"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {isOwner && (
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <TextField
+                label="New template name"
+                id="newTemplateName"
+                placeholder='e.g. "CTI Billing Form" or "24/7 Concrete COBE"'
+                value={newTemplateName}
+                onChange={(e) => setNewTemplateName(e.target.value)}
+              />
+            </div>
+            <input
+              ref={templateInputRef}
+              type="file"
+              accept=".xlsx"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleTemplateFile(file);
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => templateInputRef.current?.click()}
+              disabled={isUploadingTemplate}
+              className="rounded-lg border border-teal px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/10 disabled:opacity-50"
+            >
+              {isUploadingTemplate ? "Uploading…" : "+ Add Template"}
+            </button>
+          </div>
+        )}
+
+        {isOwner && templates.some((t) => !t.fieldMapping) && (
+          <p className="mt-3 text-xs text-gray-400">
+            A newly uploaded template needs its cell mapping set up before it can be made available — contact
+            Syntriq support to finish that step.
+          </p>
+        )}
+
+        {templateError && <p className="mt-3 text-sm text-red-600">{templateError}</p>}
       </div>
     </div>
   );
