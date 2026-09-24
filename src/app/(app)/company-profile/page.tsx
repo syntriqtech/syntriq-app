@@ -89,7 +89,7 @@ export default function CompanyProfilePage() {
   async function handleTemplateFile(file: File) {
     setTemplateError(null);
     if (!newTemplateName.trim()) {
-      setTemplateError("Give the template a name first (e.g. \"CTI Billing Form\").");
+      setTemplateError("Give the template a name first (e.g. \"My Billing Form\").");
       return;
     }
     const isXlsx = file.name.toLowerCase().endsWith(".xlsx");
@@ -581,7 +581,7 @@ export default function CompanyProfilePage() {
               <TextField
                 label="New template name"
                 id="newTemplateName"
-                placeholder='e.g. "CTI Billing Form" or "24/7 Concrete COBE"'
+                placeholder='e.g. "My Billing Form" or "GC-Specific Form"'
                 value={newTemplateName}
                 onChange={(e) => setNewTemplateName(e.target.value)}
               />
