@@ -492,7 +492,7 @@ export default function JobDetailPage() {
                           {co.description || "—"}
                         </td>
                         <td className="px-6 py-3 text-right font-medium text-navy">
-                          {currency.format(co.amount)}
+                          {currencyFull.format(co.amount)}
                         </td>
                         <td className="px-6 py-3">
                           <span

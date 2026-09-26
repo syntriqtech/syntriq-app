@@ -21,11 +21,13 @@ import ProUpgradeModal from "@/components/ProUpgradeModal";
 import { usePlan } from "@/hooks/usePlan";
 import { formatDate } from "@/lib/dateUtils";
 
+// Individual change-order amounts show their exact cents (e.g. $1,644.73) —
+// only the whole-dollar KPI/job-total figures below (currencyShort) round.
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 });
 
 const currencyShort = new Intl.NumberFormat("en-US", {
@@ -610,10 +612,7 @@ export default function ChangeOrdersPage() {
         <ChangeOrderImportModal
           jobs={jobs}
           onClose={() => setShowImport(false)}
-          onCreated={(co) => {
-            handleCreated(co);
-            setShowImport(false);
-          }}
+          onCreated={(cos) => cos.forEach(handleCreated)}
         />
       )}
 
