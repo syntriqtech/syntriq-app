@@ -6,6 +6,7 @@ import {
   fetchChangeOrders,
   fetchDeletedChangeOrders,
   restoreChangeOrder,
+  permanentlyDeleteChangeOrder,
   ChangeOrder,
   ChangeOrderStatus,
 } from "@/lib/changeOrdersDb";
@@ -120,6 +121,7 @@ export default function ChangeOrdersPage() {
   const [deletedCos, setDeletedCos] = useState<ChangeOrder[]>([]);
   const [showDeleted, setShowDeleted] = useState(false);
   const [isLoadingDeleted, setIsLoadingDeleted] = useState(false);
+  const [confirmPermDelete, setConfirmPermDelete] = useState<string | null>(null);
 
   // ── Load list metrics ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -180,6 +182,7 @@ export default function ChangeOrdersPage() {
     setJobCos([]);
     setDeletedCos([]);
     setShowDeleted(false);
+    setConfirmPermDelete(null);
     setIsLoadingCos(true);
     setView("cards");
     try {
@@ -230,6 +233,16 @@ export default function ChangeOrdersPage() {
       const restored = await restoreChangeOrder(id);
       setDeletedCos((prev) => prev.filter((c) => c.id !== id));
       setJobCos((prev) => [restored, ...prev]);
+    } catch {
+      // silently fail
+    }
+  }
+
+  async function handlePermanentDelete(id: string) {
+    try {
+      await permanentlyDeleteChangeOrder(id);
+      setDeletedCos((prev) => prev.filter((c) => c.id !== id));
+      setConfirmPermDelete(null);
     } catch {
       // silently fail
     }
@@ -579,13 +592,42 @@ export default function ChangeOrdersPage() {
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums">{currency.format(co.amount)}</td>
                         <td className="px-4 py-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleRestore(co.id)}
-                            className="text-xs font-semibold text-teal hover:underline"
-                          >
-                            Restore
-                          </button>
+                          {confirmPermDelete === co.id ? (
+                            <span className="inline-flex items-center gap-2">
+                              <span className="text-xs text-gray-400">Delete forever?</span>
+                              <button
+                                type="button"
+                                onClick={() => handlePermanentDelete(co.id)}
+                                className="text-xs font-semibold text-red-600 hover:text-red-700"
+                              >
+                                Yes, delete
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmPermDelete(null)}
+                                className="text-xs text-gray-400 hover:text-gray-600"
+                              >
+                                Cancel
+                              </button>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => handleRestore(co.id)}
+                                className="text-xs font-semibold text-teal hover:underline"
+                              >
+                                Restore
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmPermDelete(co.id)}
+                                className="text-xs font-semibold text-red-500 hover:text-red-700"
+                              >
+                                Delete permanently
+                              </button>
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}

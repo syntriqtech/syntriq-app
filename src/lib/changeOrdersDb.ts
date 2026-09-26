@@ -404,6 +404,15 @@ export async function restoreChangeOrder(id: string): Promise<ChangeOrder> {
   return rowToCo(data);
 }
 
+export async function permanentlyDeleteChangeOrder(id: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("change_orders")
+    .delete()
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
 export async function uploadCoDocument(coId: string, file: File): Promise<string> {
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
