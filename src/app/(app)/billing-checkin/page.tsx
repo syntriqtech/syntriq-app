@@ -16,6 +16,7 @@ import {
 import { computeAllJobMetrics, JobMetrics } from "@/lib/dashboardMetrics";
 import { fetchChangeOrders } from "@/lib/changeOrdersDb";
 import { fetchAllPayApplications, PayApplication } from "@/lib/payApplicationsDb";
+import { fetchAllRetentionReleases, RetentionRelease } from "@/lib/retentionReleasesDb";
 
 function formatMonth(yyyyMm: string): string {
   if (!yyyyMm) return "";
@@ -115,6 +116,7 @@ export default function BillingCheckinPage() {
   const [metrics, setMetrics] = useState<Map<string, JobMetrics>>(new Map());
   const [pendingCoCounts, setPendingCoCounts] = useState<Record<string, number>>({});
   const [payAppsThisMonth, setPayAppsThisMonth] = useState<Map<string, PayApplication[]>>(new Map());
+  const [retentionReleasesThisMonth, setRetentionReleasesThisMonth] = useState<Map<string, RetentionRelease[]>>(new Map());
 
   const month = currentMonth();
 
@@ -163,6 +165,25 @@ export default function BillingCheckinPage() {
       .catch(() => {});
   }, [month]);
 
+  // Retention releases dated this month count as billing too — a job whose
+  // only billing activity this month was issuing a retention release
+  // shouldn't keep showing as overdue just because it has no new pay app.
+  useEffect(() => {
+    fetchAllRetentionReleases()
+      .then((releases) => {
+        const map = new Map<string, RetentionRelease[]>();
+        for (const release of releases) {
+          if (release.status === "draft") continue;
+          if (release.releaseDate.slice(0, 7) !== month) continue;
+          const list = map.get(release.jobId);
+          if (list) list.push(release);
+          else map.set(release.jobId, [release]);
+        }
+        setRetentionReleasesThisMonth(map);
+      })
+      .catch(() => {});
+  }, [month]);
+
   useEffect(() => {
     if (jobs.length === 0) return;
     let cancelled = false;
@@ -196,8 +217,10 @@ export default function BillingCheckinPage() {
 
   // Split "yes" jobs into ones that already have a pay app on file this
   // month (billed) vs. ones still waiting on the actual paperwork.
-  const billedJobs = yesJobs.filter(({ job }) => payAppsThisMonth.has(job.id));
-  const awaitingJobs = yesJobs.filter(({ job }) => !payAppsThisMonth.has(job.id));
+  const hasBillingThisMonth = (jobId: string) =>
+    payAppsThisMonth.has(jobId) || retentionReleasesThisMonth.has(jobId);
+  const billedJobs = yesJobs.filter(({ job }) => hasBillingThisMonth(job.id));
+  const awaitingJobs = yesJobs.filter(({ job }) => !hasBillingThisMonth(job.id));
 
   // Jobs that said "no" this month (deferred)
   const noJobs = checkins
@@ -482,10 +505,17 @@ export default function BillingCheckinPage() {
               <div className="divide-y divide-gray-50">
                 {billedJobs.map(({ job }) => {
                   const apps = payAppsThisMonth.get(job.id) ?? [];
-                  const totalBilled = apps.reduce((sum, a) => sum + a.amountBilled, 0);
-                  const latestDate = apps.reduce(
-                    (latest, a) => (a.applicationDate > latest ? a.applicationDate : latest),
-                    apps[0]?.applicationDate ?? ""
+                  const releases = retentionReleasesThisMonth.get(job.id) ?? [];
+                  const totalBilled =
+                    apps.reduce((sum, a) => sum + a.amountBilled, 0) +
+                    releases.reduce((sum, r) => sum + r.amountReleased, 0);
+                  const allDates = [
+                    ...apps.map((a) => a.applicationDate),
+                    ...releases.map((r) => r.releaseDate),
+                  ];
+                  const latestDate = allDates.reduce(
+                    (latest, d) => (d > latest ? d : latest),
+                    allDates[0] ?? ""
                   );
                   return (
                     <div
