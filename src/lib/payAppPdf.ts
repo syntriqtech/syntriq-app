@@ -665,8 +665,15 @@ function drawFieldLine(doc: jsPDF, label: string, x: number, y: number, width: n
 }
 
 function drawSignatureImage(doc: jsPDF, dataUrl: string, x: number, y: number, maxWidth: number) {
-  const imgHeight = 32;
-  const imgWidth = Math.min(maxWidth, 140);
+  // Fit within the box preserving the signature's own aspect ratio — the
+  // captured canvas is almost never exactly this box's proportions, and
+  // stretching it to fill a fixed width x height warps every signature.
+  const boxWidth = Math.min(maxWidth, 140);
+  const boxHeight = 32;
+  const { width: natWidth, height: natHeight } = doc.getImageProperties(dataUrl);
+  const scale = Math.min(boxWidth / natWidth, boxHeight / natHeight);
+  const imgWidth = natWidth * scale;
+  const imgHeight = natHeight * scale;
   const ruleY = y + FIELD_RULE_OFFSET;
   doc.addImage(dataUrl, "PNG", x, ruleY - imgHeight, imgWidth, imgHeight);
 }

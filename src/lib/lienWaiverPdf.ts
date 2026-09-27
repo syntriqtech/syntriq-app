@@ -95,8 +95,16 @@ function drawSignatureLine(doc: jsPDF, label: string, y: number, lineWidth: numb
   doc.setLineWidth(0.5);
   doc.line(lineX, y + 1.5, lineX + lineWidth, y + 1.5);
   if (signatureDataUrl) {
-    const imgWidth = Math.min(lineWidth, 111);
-    doc.addImage(signatureDataUrl, "PNG", lineX + 4, y - 22, imgWidth, 22);
+    // Fit within the box preserving the signature's own aspect ratio — the
+    // captured canvas is almost never exactly this box's proportions, and
+    // stretching it to fill a fixed width x height warps every signature.
+    const maxWidth = Math.min(lineWidth, 111);
+    const maxHeight = 22;
+    const { width: natWidth, height: natHeight } = doc.getImageProperties(signatureDataUrl);
+    const scale = Math.min(maxWidth / natWidth, maxHeight / natHeight);
+    const imgWidth = natWidth * scale;
+    const imgHeight = natHeight * scale;
+    doc.addImage(signatureDataUrl, "PNG", lineX + 4, y - imgHeight, imgWidth, imgHeight);
   }
   return y + 18;
 }
