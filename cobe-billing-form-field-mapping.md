@@ -46,7 +46,7 @@ stale. Bump the version suffix again if the template file ever needs to change.
 
 | PDF field name | Syntriq source |
 |---|---|
-| From / To | Previous application's Period To / this application's Period To |
+| From / To | "Application date" input / "Period to" input |
 | Invoice # | `{jobNumber}-{applicationNumber}` |
 | COBE Project p16 / PO# p16 | Job name / PO number |
 | Subcontractor p16 | Company name |

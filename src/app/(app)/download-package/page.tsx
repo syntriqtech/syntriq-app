@@ -274,9 +274,6 @@ export default function DownloadPackagePage() {
     if (!job || !selectedTemplate?.filePath || !selectedTemplate?.fieldMapping) return;
     const mapping = selectedTemplate.fieldMapping as unknown as BillingPdfMapping;
 
-    const currentIndex = applicationOptions.findIndex((o) => o.applicationNumber === applicationNumber);
-    const periodFrom = currentIndex > 0 ? applicationOptions[currentIndex - 1].periodTo : job.startDate;
-
     const templateBuffer = await downloadBillingFormTemplateFile(selectedTemplate.filePath);
     const filled = await fillBillingPdf(templateBuffer, mapping, {
       job: {
@@ -295,7 +292,7 @@ export default function DownloadPackagePage() {
         contactPhone: profile?.contactPhone ?? "",
       },
       invoiceNumber: `${job.jobNumber}-${applicationNumber}`,
-      periodFrom,
+      periodFrom: applicationDate,
       periodTo,
       throughDate: periodTo,
       signatureDate: applicationDate,
