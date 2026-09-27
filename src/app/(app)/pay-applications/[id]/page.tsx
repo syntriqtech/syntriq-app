@@ -351,6 +351,7 @@ export default function PayApplicationDetailPage() {
     return d.toISOString().slice(0, 10);
   })();
   const minPaymentDate = job.startDate || fallbackMinDate;
+  const currentAppIndex = siblingApps.findIndex((a) => a.id === payAppId);
 
   return (
     <div className="flex flex-col gap-6">
@@ -362,23 +363,44 @@ export default function PayApplicationDetailPage() {
               <h1 className="text-2xl font-bold text-navy">Pay Application #{payApp.applicationNumber}</h1>
               {siblingApps.length > 1 && (
                 <div className="flex items-center gap-1">
-                  {siblingApps.map((app) => (
-                    <button
-                      key={app.id}
-                      type="button"
-                      onClick={() => {
-                        if (app.id !== payAppId) router.push(`/pay-applications/${app.id}`);
-                      }}
-                      title={`Pay Application #${app.applicationNumber}`}
-                      className={
-                        app.id === payAppId
-                          ? "flex h-6 min-w-[24px] items-center justify-center rounded-full bg-navy px-2 text-xs font-semibold text-white"
-                          : "flex h-6 min-w-[24px] items-center justify-center rounded-full border border-gray-200 px-2 text-xs font-medium text-gray-500 hover:border-teal hover:text-teal"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (currentAppIndex > 0) router.push(`/pay-applications/${siblingApps[currentAppIndex - 1].id}`);
+                    }}
+                    disabled={currentAppIndex <= 0}
+                    aria-label="Previous application"
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 text-gray-500 hover:border-teal hover:text-teal disabled:opacity-30 disabled:hover:border-gray-200 disabled:hover:text-gray-500"
+                  >
+                    ‹
+                  </button>
+                  <select
+                    value={payAppId}
+                    onChange={(e) => {
+                      if (e.target.value !== payAppId) router.push(`/pay-applications/${e.target.value}`);
+                    }}
+                    aria-label="Jump to application"
+                    className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-sm font-medium text-navy focus:border-teal focus:outline-none focus:ring-1 focus:ring-teal/30"
+                  >
+                    {siblingApps.map((app) => (
+                      <option key={app.id} value={app.id}>
+                        #{app.applicationNumber}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (currentAppIndex >= 0 && currentAppIndex < siblingApps.length - 1) {
+                        router.push(`/pay-applications/${siblingApps[currentAppIndex + 1].id}`);
                       }
-                    >
-                      {app.applicationNumber}
-                    </button>
-                  ))}
+                    }}
+                    disabled={currentAppIndex < 0 || currentAppIndex >= siblingApps.length - 1}
+                    aria-label="Next application"
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 text-gray-500 hover:border-teal hover:text-teal disabled:opacity-30 disabled:hover:border-gray-200 disabled:hover:text-gray-500"
+                  >
+                    ›
+                  </button>
                 </div>
               )}
             </div>
