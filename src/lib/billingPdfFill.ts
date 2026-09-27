@@ -1,4 +1,18 @@
-import { PDFDocument, PDFName, PDFDict, PDFRef, PDFPage, PDFHexString, PDFString, PDFArray, PDFNumber } from "pdf-lib";
+import {
+  PDFDocument,
+  PDFName,
+  PDFDict,
+  PDFRef,
+  PDFPage,
+  PDFHexString,
+  PDFString,
+  PDFArray,
+  PDFNumber,
+  PDFFont,
+  StandardFonts,
+  TextAlignment,
+  layoutSinglelineText,
+} from "pdf-lib";
 import { SOVLineItem } from "@/lib/sovData";
 
 // Fill engine for GC-specific fillable-PDF billing forms (first case: COBE
@@ -144,6 +158,25 @@ function findWidgetByName(doc: PDFDocument, page: PDFPage, name: string): { ref:
   return null;
 }
 
+// Bumps every field's rendered size up by this much beyond whatever it
+// would otherwise land on (its own auto-fit size for plain text fields, or
+// CURRENCY_FONT_SIZE for the dollar cells) — a flat, per-field bump rather
+// than one fixed size for everything, so a tight field doesn't suddenly
+// get text too big to fit.
+const FONT_SIZE_BUMP = 1;
+
+// Mirrors the inset pdf-lib's own text-field appearance provider uses
+// (border width + 1pt padding on each side) when it lays out a field's
+// text — needed here because we compute the auto-fit size ourselves (see
+// setText below) rather than letting pdf-lib do it from the (malformed)
+// /DA, so the bounds we feed layoutSinglelineText must match what it would
+// have used.
+function fieldTextBounds(rectWidth: number, rectHeight: number) {
+  const borderWidth = 1;
+  const padding = 1;
+  return { x: 0, y: 0, width: rectWidth - (borderWidth + padding) * 2, height: rectHeight - (borderWidth + padding) * 2 };
+}
+
 // Directly poking a field's /V (rather than going through
 // form.getTextField(name).setText(), which the shared-name collision above
 // rules out) skips the bookkeeping that setText() normally does — most
@@ -154,10 +187,28 @@ function findWidgetByName(doc: PDFDocument, page: PDFPage, name: string): { ref:
 // edited field with a pre-existing blank appearance would keep showing
 // blank despite /V being set correctly underneath. Marking it dirty here
 // forces every field we touch to get a fresh appearance regardless.
-function setText(doc: PDFDocument, page: PDFPage, name: string | undefined, value: string) {
+//
+// The /DA string this writes is also a from-scratch replacement, not a
+// patch of the existing one — COBE's own /DA strings store a literal
+// backslash-oh-five-seven ("\057") in place of the "/" before the font
+// name (a quirk of whatever tool built this template, not something wrong
+// with our fill), which pdf-lib's own DA-parsing regex can't match, so
+// every field silently fell back to its own auto-computed size instead of
+// anything declared. We replicate that auto-fit computation ourselves via
+// layoutSinglelineText (the same routine pdf-lib's fallback uses) so each
+// field keeps sizing itself to its own box, and then add FONT_SIZE_BUMP on
+// top, per Jason's ask to make the filled-in text a point bigger overall.
+function setText(doc: PDFDocument, page: PDFPage, font: PDFFont, name: string | undefined, value: string) {
   if (!name) return;
   const widget = findWidgetByName(doc, page, name);
   if (!widget) return;
+  const rectArr = widget.dict.get(PDFName.of("Rect"));
+  if (rectArr instanceof PDFArray && value) {
+    const [x0, y0, x1, y1] = rectArr.asArray().map((n) => (n as PDFNumber).asNumber());
+    const bounds = fieldTextBounds(x1 - x0, y1 - y0);
+    const { fontSize } = layoutSinglelineText(value, { alignment: TextAlignment.Left, font, bounds });
+    widget.dict.set(PDFName.of("DA"), PDFString.of(`0 g /Helvetica ${fontSize + FONT_SIZE_BUMP} Tf`));
+  }
   widget.dict.set(PDFName.of("V"), PDFHexString.fromText(value));
   doc.getForm().markFieldAsDirty(widget.ref);
 }
@@ -165,18 +216,13 @@ function setText(doc: PDFDocument, page: PDFPage, name: string | undefined, valu
 // The dollar-amount cells in COBE's table render at wildly different sizes
 // once filled (e.g. the Base row's Requested Payment box comes out at 6pt
 // while the Contracted Amount box right next to it comes out at 9pt), even
-// though every cell's /DA string literally declares the same "9 Tf". The
-// template's DA strings are stored with a literal backslash-oh-five-seven
-// ("\057") in place of the "/" before the font name (COBE's own PDF tool's
-// quirk, not something wrong with our fill) — pdf-lib's regex for reading a
-// field's declared font size expects a literal "/" and silently fails to
-// match that, so every field falls back to auto-computed-per-box sizing
-// instead of the declared 9pt. Writing a brand new, cleanly-formatted /DA
-// string (rather than trying to patch the existing one) sidesteps the bad
-// escaping entirely and gives every currency cell the same explicit size.
-// 8pt comfortably fits every box in the table (the shortest is ~11pt tall)
-// and still fits a 7-figure amount in the narrowest (~65pt-wide) column.
-const CURRENCY_FONT_SIZE = 8;
+// though every cell's /DA string literally declares the same "9 Tf" — see
+// the note on setText above for why (same broken-DA cause). Writing one
+// explicit size for every currency cell instead makes the whole table read
+// as one consistent table. 9pt comfortably fits every box in the table
+// (the shortest is ~11pt tall) and still fits a 7-figure amount in the
+// narrowest (~65pt-wide) column.
+const CURRENCY_FONT_SIZE = 9;
 
 function setCurrencyText(doc: PDFDocument, page: PDFPage, name: string | undefined, value: string) {
   if (!name) return;
@@ -235,17 +281,18 @@ function removeWidgetByFieldName(doc: PDFDocument, page: PDFPage, name: string):
 export async function fillBillingPdf(templateBuffer: ArrayBuffer, mapping: BillingPdfMapping, data: BillingPdfData): Promise<Uint8Array> {
   const doc = await PDFDocument.load(templateBuffer);
   const page = doc.getPage(mapping.page);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
   const f = mapping.fields;
 
-  setText(doc, page, f.from, formatDate(data.periodFrom));
-  setText(doc, page, f.to, formatDate(data.periodTo));
-  setText(doc, page, f.invoiceNumber, data.invoiceNumber);
-  setText(doc, page, f.project, data.job.name);
-  setText(doc, page, f.poNumber, data.job.poNumber);
-  setText(doc, page, f.subcontractor, data.company.name);
-  setText(doc, page, f.accountingContact, data.company.contactName);
-  setText(doc, page, f.email, data.company.contactEmail);
-  setText(doc, page, f.phone, data.company.contactPhone);
+  setText(doc, page, font, f.from, formatDate(data.periodFrom));
+  setText(doc, page, font, f.to, formatDate(data.periodTo));
+  setText(doc, page, font, f.invoiceNumber, data.invoiceNumber);
+  setText(doc, page, font, f.project, data.job.name);
+  setText(doc, page, font, f.poNumber, data.job.poNumber);
+  setText(doc, page, font, f.subcontractor, data.company.name);
+  setText(doc, page, font, f.accountingContact, data.company.contactName);
+  setText(doc, page, font, f.email, data.company.contactEmail);
+  setText(doc, page, font, f.phone, data.company.contactPhone);
 
   matchRectHeight(doc, page, f.baseContractedAmount, f.baseRequestedPayment);
   setCurrencyText(doc, page, f.baseContractedAmount, currency(data.job.contractValue));
@@ -281,14 +328,14 @@ export async function fillBillingPdf(templateBuffer: ArrayBuffer, mapping: Billi
   setCurrencyText(doc, page, f.netTotal, currency(netTotal));
 
   setCurrencyText(doc, page, f.amountOfCheck, currency(netTotal));
-  setText(doc, page, f.checkPayableTo, data.company.name);
-  setText(doc, page, f.nameOfClaimant, data.company.name);
-  setText(doc, page, f.nameOfCustomer, data.job.customer);
-  setText(doc, page, f.jobLocation, data.job.jobAddress);
-  setText(doc, page, f.owner, data.job.owner);
-  setText(doc, page, f.throughDate, formatDate(data.throughDate));
-  setText(doc, page, f.claimantTitle, data.claimantTitle);
-  setText(doc, page, f.dateOfSignature, formatDate(data.signatureDate));
+  setText(doc, page, font, f.checkPayableTo, data.company.name);
+  setText(doc, page, font, f.nameOfClaimant, data.company.name);
+  setText(doc, page, font, f.nameOfCustomer, data.job.customer);
+  setText(doc, page, font, f.jobLocation, data.job.jobAddress);
+  setText(doc, page, font, f.owner, data.job.owner);
+  setText(doc, page, font, f.throughDate, formatDate(data.throughDate));
+  setText(doc, page, font, f.claimantTitle, data.claimantTitle);
+  setText(doc, page, font, f.dateOfSignature, formatDate(data.signatureDate));
 
   const sigRect = removeWidgetByFieldName(doc, page, f.signatureField);
   if (sigRect && data.signatureDataUrl) {
