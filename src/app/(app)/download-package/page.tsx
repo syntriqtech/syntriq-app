@@ -50,6 +50,10 @@ export default function DownloadPackagePage() {
   const [periodTo, setPeriodTo] = useState(todayIsoDate);
   const [selectedWaivers, setSelectedWaivers] = useState<LienWaiverKind[]>(["conditional-progress"]);
   const [claimantTitle, setClaimantTitle] = useState("");
+  // Just the role title (e.g. "Project Accountant"), no name — COBE's own
+  // "Claimant's Title" box wants only this, unlike the combined
+  // "Name, Title" line the default lien waivers use for claimantTitle above.
+  const [signerRoleTitle, setSignerRoleTitle] = useState("");
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
   const [savedSignature, setSavedSignature] = useState<string>("");
   const [sigModalOpen, setSigModalOpen] = useState(false);
@@ -102,6 +106,7 @@ export default function DownloadPackagePage() {
       if (!p) return;
       const signer = formatSignerLine(p);
       if (signer) setClaimantTitle(signer);
+      if (p.roleTitle) setSignerRoleTitle(p.roleTitle);
       if (p.fullName) setUserFullName(p.fullName);
       if (p.signatureData) {
         setSavedSignature(p.signatureData);
@@ -296,7 +301,7 @@ export default function DownloadPackagePage() {
       periodTo,
       throughDate: periodTo,
       signatureDate: applicationDate,
-      claimantTitle,
+      claimantTitle: signerRoleTitle,
       signatureDataUrl: signatureDataUrl ?? undefined,
       baseThisPeriod: lineItems.reduce((sum, line) => sum + line.thisPeriod, 0),
       changeOrders,

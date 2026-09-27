@@ -62,7 +62,7 @@ stale. Bump the version suffix again if the template file ever needs to change.
 | Name of Claimant p16 / Name of Customer p16 | Company name / `job.customer` (COBE) |
 | Job Location p16 / Owner p16 / Through Date p16 | `job.jobAddress` / `job.owner` / Period To |
 | Claimant's Signature | **Not a text field — a real AcroForm `/Sig` field.** pdf-lib can't fill those, so it's removed from the page and the adopted signature image is drawn on top instead (see `removeWidgetByFieldName` in billingPdfFill.ts) — otherwise unsigned `/Sig` fields render a "click to sign" tag in most viewers. |
-| Claimant's Title / Date of Signature p16 | Signer title / signature date |
+| Claimant's Title / Date of Signature p16 | User profile's `roleTitle` only (e.g. "Project Accountant" — not "Jane Doe, Project Accountant"; the combined name+title line used for the default lien waivers isn't right here) / signature date |
 | Dates of waiver and release / Amount(s) of unpaid progress payment(s) p16 | Left blank — same default as the existing lien waiver flow |
 
 ## Final page differences
