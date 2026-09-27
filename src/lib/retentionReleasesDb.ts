@@ -197,6 +197,13 @@ export async function createRetentionRelease(input: CreateReleaseInput): Promise
     .single();
   if (error) throw new Error(error.message);
   const created = rowToRelease(data);
+  // Issuing the release (not just a $0/draft placeholder) is the sub's own
+  // answer to "are you billing this job this month" — same as submitting a
+  // pay application does. Don't make them answer Billing Check-in a second
+  // time for billing they already did via a retention release.
+  if (created.status !== "draft") {
+    autoMarkBillingThisMonthIfCurrent(created.jobId, created.releaseDate).catch(() => {});
+  }
   logActivity(
     "retention_release.created",
     "retention_release",
