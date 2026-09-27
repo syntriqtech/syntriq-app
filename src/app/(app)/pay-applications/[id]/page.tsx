@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   fetchPayApplicationById,
+  fetchPayApplicationsByJob,
   certifyPayApplication,
   uncertifyPayApplication,
   fetchCertificationHistory,
@@ -32,9 +33,11 @@ const currency = new Intl.NumberFormat("en-US", {
 
 export default function PayApplicationDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const payAppId = params.id as string;
 
   const [payApp, setPayApp] = useState<PayApplication | null>(null);
+  const [siblingApps, setSiblingApps] = useState<PayApplication[]>([]);
   const [job, setJob] = useState<DbJob | null>(null);
   const [payments, setPayments] = useState<PayAppPayment[]>([]);
   const [deletedPayments, setDeletedPayments] = useState<PayAppPayment[]>([]);
@@ -92,6 +95,21 @@ export default function PayApplicationDetailPage() {
         const foundJob = jobs.find((j) => j.id === payAppData.jobId);
         if (foundJob) {
           setJob(foundJob);
+
+          // Sibling applications for this job, for the app switcher in the header.
+          fetchPayApplicationsByJob(foundJob.id)
+            .then((apps) => {
+              if (cancelled) return;
+              const sorted = [...apps].sort((a, b) => {
+                const numA = Number(a.applicationNumber);
+                const numB = Number(b.applicationNumber);
+                return !Number.isNaN(numA) && !Number.isNaN(numB)
+                  ? numA - numB
+                  : a.applicationNumber.localeCompare(b.applicationNumber);
+              });
+              setSiblingApps(sorted);
+            })
+            .catch(() => {});
 
           // Fetch SOV for this application to show billing details
           const { lines, changeOrders: cos } = await fetchSovItems(foundJob.id, payAppData.applicationNumber);
@@ -340,7 +358,30 @@ export default function PayApplicationDetailPage() {
       <div>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-navy">Pay Application #{payApp.applicationNumber}</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-navy">Pay Application #{payApp.applicationNumber}</h1>
+              {siblingApps.length > 1 && (
+                <div className="flex items-center gap-1">
+                  {siblingApps.map((app) => (
+                    <button
+                      key={app.id}
+                      type="button"
+                      onClick={() => {
+                        if (app.id !== payAppId) router.push(`/pay-applications/${app.id}`);
+                      }}
+                      title={`Pay Application #${app.applicationNumber}`}
+                      className={
+                        app.id === payAppId
+                          ? "flex h-6 min-w-[24px] items-center justify-center rounded-full bg-navy px-2 text-xs font-semibold text-white"
+                          : "flex h-6 min-w-[24px] items-center justify-center rounded-full border border-gray-200 px-2 text-xs font-medium text-gray-500 hover:border-teal hover:text-teal"
+                      }
+                    >
+                      {app.applicationNumber}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <p className="mt-1 text-sm text-gray-500">
               {job.jobNumber}{job.jobName ? ` · ${job.jobName}` : ""} — {job.customer}
             </p>
