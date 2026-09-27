@@ -16,6 +16,8 @@ import { findPayApplication, savePayApplicationPdf } from "@/lib/payApplications
 import { LienWaiverKind } from "@/lib/lienWaiverPdf";
 import { BillingFormTemplate, fetchBillingFormTemplates, downloadBillingFormTemplateFile } from "@/lib/billingFormTemplatesDb";
 import { BillingWorkbookMapping, fillBillingWorkbook } from "@/lib/billingWorkbookFill";
+import { BillingPdfMapping, fillBillingPdf } from "@/lib/billingPdfFill";
+import { downloadPdfBlob } from "@/lib/billingPackagePdf";
 import { fetchGeneralContractors, GeneralContractor } from "@/lib/generalContractorsDb";
 import TextField from "@/components/TextField";
 import Button from "@/components/Button";
@@ -84,6 +86,10 @@ export default function DownloadPackagePage() {
   const readyTemplates = billingFormTemplates.filter((t) => t.enabled && t.filePath && t.fieldMapping);
   const selectedTemplate = readyTemplates.find((t) => t.id === selectedTemplateId) ?? null;
   const isCustomMode = selectedTemplate !== null;
+  // PDF-based custom templates (e.g. COBE's fillable form) reuse the same
+  // signature the default package uses, unlike the Excel path above, which
+  // doesn't sign anything yet.
+  const isPdfCustomMode = (selectedTemplate?.fieldMapping as { kind?: string } | null)?.kind === "pdf";
 
   useEffect(() => {
     fetchBillingFormTemplates().then(setBillingFormTemplates).catch(() => {});
@@ -261,10 +267,56 @@ export default function DownloadPackagePage() {
     URL.revokeObjectURL(url);
   }
 
+  // Custom Billing Forms path for a fillable-PDF template (e.g. COBE's
+  // EXPRESS Pay Application) — same signature the default package uses,
+  // downloaded directly like the Excel path above.
+  async function handleDownloadCustomPdf() {
+    if (!job || !selectedTemplate?.filePath || !selectedTemplate?.fieldMapping) return;
+    const mapping = selectedTemplate.fieldMapping as unknown as BillingPdfMapping;
+
+    const currentIndex = applicationOptions.findIndex((o) => o.applicationNumber === applicationNumber);
+    const periodFrom = currentIndex > 0 ? applicationOptions[currentIndex - 1].periodTo : job.startDate;
+
+    const templateBuffer = await downloadBillingFormTemplateFile(selectedTemplate.filePath);
+    const filled = await fillBillingPdf(templateBuffer, mapping, {
+      job: {
+        name: job.jobName,
+        poNumber: job.poNumber ?? "",
+        customer: job.customer,
+        jobAddress: job.jobAddress,
+        owner: job.owner,
+        retentionRateCW: job.retentionRateCW,
+        contractValue: job.contractValue,
+      },
+      company: {
+        name: contractor.company,
+        contactName: profile?.contactName ?? "",
+        contactEmail: profile?.contactEmail ?? "",
+        contactPhone: profile?.contactPhone ?? "",
+      },
+      invoiceNumber: `${job.jobNumber}-${applicationNumber}`,
+      periodFrom,
+      periodTo,
+      throughDate: periodTo,
+      signatureDate: applicationDate,
+      claimantTitle,
+      signatureDataUrl: signatureDataUrl ?? undefined,
+      baseThisPeriod: lineItems.reduce((sum, line) => sum + line.thisPeriod, 0),
+      changeOrders,
+    });
+
+    const kindLabel = mapping.hasRetentionRow ? "progress" : "final";
+    downloadPdfBlob(filled, `${job.jobNumber}-billing-form-${kindLabel}-app${applicationNumber}.pdf`);
+  }
+
   async function handleDownload() {
     if (!job) return;
     setIsGenerating(true);
     try {
+      if (isPdfCustomMode) {
+        await handleDownloadCustomPdf();
+        return;
+      }
       if (isCustomMode) {
         await handleDownloadCustomWorkbook();
         return;
@@ -381,9 +433,10 @@ export default function DownloadPackagePage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [savePromptOpen, saveState]);
 
-  const canDownload = isCustomMode
-    ? Boolean(job)
-    : Boolean(job) && Boolean(signatureDataUrl) && claimantTitle.trim().length > 0;
+  const needsSignature = !isCustomMode || isPdfCustomMode;
+  const canDownload = needsSignature
+    ? Boolean(job) && Boolean(signatureDataUrl) && claimantTitle.trim().length > 0
+    : Boolean(job);
 
   // Deep-link straight to this job's pay application when one exists (same
   // route pattern used from the dashboard, jobs page, and pay-applications
@@ -489,41 +542,52 @@ export default function DownloadPackagePage() {
         </p>
       </div>
 
-      {isCustomMode ? (
+      {isCustomMode && !isPdfCustomMode && (
         <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
           <h2 className="text-sm font-semibold text-gray-500">2. Custom billing form</h2>
           <p className="mt-1 text-sm text-gray-500">
-            This will fill <span className="font-medium text-navy">{selectedTemplate?.name}</span> (
-            {selectedTemplate?.fileName}) with this job&apos;s data instead of the default PDF package. Lien
+            This will fill <span className="font-medium text-navy">{selectedTemplate?.name}</span>{" "}
+            ({selectedTemplate?.fileName}) with this job&apos;s data instead of the default PDF package. Lien
             waivers and signatures aren&apos;t part of this yet.
           </p>
         </div>
-      ) : (
-        <>
-          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-gray-500">2. Documents to include</h2>
-            <p className="mt-1 text-sm text-gray-500">The pay application packet (G702 + SOV) and invoice cover are always included. Choose which lien waiver(s) to add.</p>
-            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {WAIVER_OPTIONS.map((option) => (
-                <label key={option.kind} className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-navy">
-                  <input
-                    type="checkbox"
-                    checked={selectedWaivers.includes(option.kind)}
-                    onChange={() => toggleWaiver(option.kind)}
-                    className="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal/30"
-                  />
-                  {option.label}
-                </label>
-              ))}
-            </div>
+      )}
+      {isPdfCustomMode && (
+        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+          <h2 className="text-sm font-semibold text-gray-500">2. Custom billing form</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            This will fill <span className="font-medium text-navy">{selectedTemplate?.name}</span>{" "}
+            with this job&apos;s data instead of the default PDF package. Its own lien waiver is built into the form —
+            sign once below.
+          </p>
+        </div>
+      )}
+      {!isCustomMode && (
+        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+          <h2 className="text-sm font-semibold text-gray-500">2. Documents to include</h2>
+          <p className="mt-1 text-sm text-gray-500">The pay application packet (G702 + SOV) and invoice cover are always included. Choose which lien waiver(s) to add.</p>
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {WAIVER_OPTIONS.map((option) => (
+              <label key={option.kind} className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-navy">
+                <input
+                  type="checkbox"
+                  checked={selectedWaivers.includes(option.kind)}
+                  onChange={() => toggleWaiver(option.kind)}
+                  className="h-4 w-4 rounded border-gray-300 text-teal focus:ring-teal/30"
+                />
+                {option.label}
+              </label>
+            ))}
           </div>
-
-          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-gray-500">3. Sign</h2>
-            <p className="mt-1 text-sm text-gray-500">
-              This signature is stamped on the G702 contractor line and every lien waiver in the package.
-            </p>
-            <div className="mt-4 flex flex-col gap-4">
+        </div>
+      )}
+      {needsSignature && (
+        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+          <h2 className="text-sm font-semibold text-gray-500">3. Sign</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            This signature is stamped on the G702 contractor line and every lien waiver in the package.
+          </p>
+          <div className="mt-4 flex flex-col gap-4">
               <TextField
                 label="Signer name & title"
                 id="claimantTitle"
@@ -568,7 +632,6 @@ export default function DownloadPackagePage() {
               )}
             </div>
           </div>
-        </>
       )}
 
       <AdoptSignatureModal
@@ -600,7 +663,7 @@ export default function DownloadPackagePage() {
       </div>
       {!canDownload && (
         <p className="text-xs text-gray-500">
-          {isCustomMode ? "Select a job to enable download." : "Add a signer name/title and sign above to enable download."}
+          {needsSignature ? "Add a signer name/title and sign above to enable download." : "Select a job to enable download."}
         </p>
       )}
 
