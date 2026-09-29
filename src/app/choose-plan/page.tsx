@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Sidebar from "@/components/Sidebar";
 import DashboardPage from "@/app/(app)/dashboard/page";
+import { createClient } from "@/lib/supabase/client";
 import { ANNUAL_DISCOUNT_LABEL, BillingInterval, PLAN_ANNUAL_PRICING, PLAN_LIMITS, Plan } from "@/lib/planLimits";
 
 const PLAN_COPY: Record<Plan, { name: string }> = {
@@ -33,9 +35,19 @@ const PLAN_FEATURES: Record<Plan, { label: string; value: string }[]> = {
 };
 
 export default function ChoosePlanPage() {
+  const router = useRouter();
+  const supabase = createClient();
   const [interval, setInterval] = useState<BillingInterval>("monthly");
   const [loadingPlan, setLoadingPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  async function handleLogout() {
+    setIsLoggingOut(true);
+    await supabase.auth.signOut();
+    router.push("/");
+    router.refresh();
+  }
 
   async function handleChoose(plan: Plan) {
     setLoadingPlan(plan);
@@ -148,6 +160,17 @@ export default function ChoosePlanPage() {
               </div>
             );
           })}
+        </div>
+
+        <div className="mt-8 text-center">
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="text-sm text-teal hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isLoggingOut ? "Logging out…" : "Log out and use a different account"}
+          </button>
         </div>
       </div>
       </main>
