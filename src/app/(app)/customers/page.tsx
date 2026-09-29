@@ -292,8 +292,11 @@ export default function CustomersPage() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
           onClick={isSavingForm ? undefined : closeForm}
         >
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between border-b border-gray-100 px-6 py-4">
+          <div
+            className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-none items-start justify-between border-b border-gray-100 px-6 py-4">
               <h2 className="text-lg font-bold text-navy">
                 {formModal.mode === "create" ? "New customer" : "Edit customer"}
               </h2>
@@ -304,114 +307,124 @@ export default function CustomersPage() {
               )}
             </div>
 
-            <div className="flex flex-col gap-4 p-6">
-              <TextField
-                label="Customer name"
-                id="gcName"
-                required
-                value={formFields.name}
-                onChange={(e) => setFormFields((prev) => ({ ...prev, name: e.target.value }))}
-              />
-              <TextField
-                label="Billing address"
-                id="gcBillingAddress"
-                value={formFields.billingAddress}
-                onChange={(e) => setFormFields((prev) => ({ ...prev, billingAddress: e.target.value }))}
-              />
-              <TextField
-                label="Payment terms"
-                id="gcPaymentTerms"
-                placeholder="e.g. Net 30"
-                value={formFields.paymentTerms}
-                onChange={(e) => setFormFields((prev) => ({ ...prev, paymentTerms: e.target.value }))}
-              />
-              <TextField
-                label="Default retention %"
-                id="gcRetention"
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                value={formFields.defaultRetentionPct}
-                onChange={(e) => setFormFields((prev) => ({ ...prev, defaultRetentionPct: e.target.value }))}
-                onWheel={(e) => e.currentTarget.blur()}
-              />
-              <TextField
-                label="Billing platform"
-                id="gcBillingPlatform"
-                placeholder="e.g. Procore, GCPay, Textura"
-                value={formFields.billingPlatform}
-                onChange={(e) => setFormFields((prev) => ({ ...prev, billingPlatform: e.target.value }))}
-              />
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <TextField
+                    label="Customer name"
+                    id="gcName"
+                    required
+                    value={formFields.name}
+                    onChange={(e) => setFormFields((prev) => ({ ...prev, name: e.target.value }))}
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <TextField
+                    label="Billing address"
+                    id="gcBillingAddress"
+                    value={formFields.billingAddress}
+                    onChange={(e) => setFormFields((prev) => ({ ...prev, billingAddress: e.target.value }))}
+                  />
+                </div>
+                <TextField
+                  label="Payment terms"
+                  id="gcPaymentTerms"
+                  placeholder="e.g. Net 30"
+                  value={formFields.paymentTerms}
+                  onChange={(e) => setFormFields((prev) => ({ ...prev, paymentTerms: e.target.value }))}
+                />
+                <TextField
+                  label="Default retention %"
+                  id="gcRetention"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={formFields.defaultRetentionPct}
+                  onChange={(e) => setFormFields((prev) => ({ ...prev, defaultRetentionPct: e.target.value }))}
+                  onWheel={(e) => e.currentTarget.blur()}
+                />
+                <div className="sm:col-span-2">
+                  <TextField
+                    label="Billing platform"
+                    id="gcBillingPlatform"
+                    placeholder="e.g. Procore, GCPay, Textura"
+                    value={formFields.billingPlatform}
+                    onChange={(e) => setFormFields((prev) => ({ ...prev, billingPlatform: e.target.value }))}
+                  />
+                </div>
 
-              <div>
-                <h3 className="text-sm font-semibold text-gray-500">Contact info (optional)</h3>
-                <p className="mt-1 text-xs text-gray-400">
-                  Only needed for an org with a Custom Billing Forms template enabled.
-                </p>
+                <div className="sm:col-span-2">
+                  <h3 className="text-sm font-semibold text-gray-500">Contact info (optional)</h3>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Only needed for an org with a Custom Billing Forms template enabled.
+                  </p>
+                </div>
+                <TextField
+                  label="Phone"
+                  id="gcPhone"
+                  type="tel"
+                  value={formFields.phone}
+                  onChange={(e) => setFormFields((prev) => ({ ...prev, phone: e.target.value }))}
+                />
+                <TextField
+                  label="Fax"
+                  id="gcFax"
+                  type="tel"
+                  value={formFields.fax}
+                  onChange={(e) => setFormFields((prev) => ({ ...prev, fax: e.target.value }))}
+                />
+                <TextField
+                  label="PM name"
+                  id="gcPmName"
+                  value={formFields.pmName}
+                  onChange={(e) => setFormFields((prev) => ({ ...prev, pmName: e.target.value }))}
+                />
+                <TextField
+                  label="PM email"
+                  id="gcPmEmail"
+                  type="email"
+                  value={formFields.pmEmail}
+                  onChange={(e) => setFormFields((prev) => ({ ...prev, pmEmail: e.target.value }))}
+                />
+                <div className="sm:col-span-2">
+                  <TextField
+                    label="PM mobile"
+                    id="gcPmMobile"
+                    type="tel"
+                    value={formFields.pmMobile}
+                    onChange={(e) => setFormFields((prev) => ({ ...prev, pmMobile: e.target.value }))}
+                  />
+                </div>
+
+                {formModal.mode === "edit" && (
+                  <p className="text-xs text-gray-400 sm:col-span-2">
+                    Changes here update the customer record only — jobs that already copied this info won&apos;t update
+                    automatically. To fix a job&apos;s displayed customer info, use Delete → Reassign on the duplicate instead.
+                  </p>
+                )}
+
+                {formError && <p className="text-sm text-red-600 sm:col-span-2">{formError}</p>}
               </div>
-              <TextField
-                label="Phone"
-                id="gcPhone"
-                type="tel"
-                value={formFields.phone}
-                onChange={(e) => setFormFields((prev) => ({ ...prev, phone: e.target.value }))}
-              />
-              <TextField
-                label="Fax"
-                id="gcFax"
-                type="tel"
-                value={formFields.fax}
-                onChange={(e) => setFormFields((prev) => ({ ...prev, fax: e.target.value }))}
-              />
-              <TextField
-                label="PM name"
-                id="gcPmName"
-                value={formFields.pmName}
-                onChange={(e) => setFormFields((prev) => ({ ...prev, pmName: e.target.value }))}
-              />
-              <TextField
-                label="PM email"
-                id="gcPmEmail"
-                type="email"
-                value={formFields.pmEmail}
-                onChange={(e) => setFormFields((prev) => ({ ...prev, pmEmail: e.target.value }))}
-              />
-              <TextField
-                label="PM mobile"
-                id="gcPmMobile"
-                type="tel"
-                value={formFields.pmMobile}
-                onChange={(e) => setFormFields((prev) => ({ ...prev, pmMobile: e.target.value }))}
-              />
+            </div>
 
-              {formModal.mode === "edit" && (
-                <p className="text-xs text-gray-400">
-                  Changes here update the customer record only — jobs that already copied this info won&apos;t update
-                  automatically. To fix a job&apos;s displayed customer info, use Delete → Reassign on the duplicate instead.
-                </p>
-              )}
-
-              {formError && <p className="text-sm text-red-600">{formError}</p>}
-
-              <div className="flex gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={closeForm}
-                  disabled={isSavingForm}
-                  className="flex-1 rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-semibold text-navy hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveForm}
-                  disabled={isSavingForm}
-                  className="flex-1 rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal/90 disabled:opacity-50"
-                >
-                  {isSavingForm ? "Saving…" : "Save"}
-                </button>
-              </div>
+            <div className="flex flex-none gap-3 border-t border-gray-100 p-6 pt-4">
+              <button
+                type="button"
+                onClick={closeForm}
+                disabled={isSavingForm}
+                className="flex-1 rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-semibold text-navy hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveForm}
+                disabled={isSavingForm}
+                className="flex-1 rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal/90 disabled:opacity-50"
+              >
+                {isSavingForm ? "Saving…" : "Save"}
+              </button>
             </div>
           </div>
         </div>
