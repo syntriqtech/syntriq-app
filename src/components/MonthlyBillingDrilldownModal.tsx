@@ -88,6 +88,11 @@ export default function MonthlyBillingDrilldownModal({ monthKey, applications, j
                             {row.jobNumber && (
                               <span className="ml-2 text-xs font-normal text-gray-400">#{row.jobNumber}</span>
                             )}
+                            {row.isArchived && (
+                              <span className="ml-2 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-500">
+                                Archived
+                              </span>
+                            )}
                           </div>
                           <div className="truncate text-xs text-gray-500">{row.customer}</div>
                         </div>

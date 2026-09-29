@@ -12,7 +12,7 @@ import {
 } from "@/lib/payApplicationsDb";
 import { STATUS_LABEL, STATUS_BADGE_STYLE } from "@/lib/payApplicationStatusUi";
 import { fetchPayAppPayments, fetchDeletedPayAppPayments, recordPayment, deletePayment, restorePayment, permanentlyDeletePayment, PayAppPayment } from "@/lib/payAppPaymentsDb";
-import { fetchJobs, DbJob } from "@/lib/jobs";
+import { fetchJobById, DbJob } from "@/lib/jobs";
 import { fetchApplicationOptions, fetchSovItems } from "@/lib/sovLineItemsDb";
 import { computeLine, sumLines, previousCertificates } from "@/lib/payAppMath";
 import { SOVLineItem } from "@/lib/sovData";
@@ -82,9 +82,8 @@ export default function PayApplicationDetailPage() {
 
     (async () => {
       try {
-        const [payAppData, jobs, contractorData] = await Promise.all([
+        const [payAppData, contractorData] = await Promise.all([
           fetchPayApplicationById(payAppId),
-          fetchJobs(),
           getContractorInfo(),
         ]);
 
@@ -92,7 +91,12 @@ export default function PayApplicationDetailPage() {
         setPayApp(payAppData);
         setContractor(contractorData);
 
-        const foundJob = jobs.find((j) => j.id === payAppData.jobId);
+        // fetchJobById (not fetchJobs) so this still resolves when the job
+        // has since been archived — fetchJobs() is active-only and this page
+        // is reached from historical views (e.g. the dashboard's Monthly
+        // Billing drilldown) where the job may no longer be active.
+        const foundJob = await fetchJobById(payAppData.jobId);
+
         if (foundJob) {
           setJob(foundJob);
 

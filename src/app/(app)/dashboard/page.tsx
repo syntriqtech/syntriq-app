@@ -28,7 +28,8 @@ function todayIsoDate() {
 
 export default function DashboardPage() {
   const { jobs, isLoading: isLoadingJobs } = useJobs();
-  const { jobMetrics, applications, aging, chart, billedMonthComparison, isLoading } = useDashboardMetrics();
+  const { jobMetrics, applications, aging, chart, billedMonthComparison, jobsForReporting, isLoading } =
+    useDashboardMetrics();
   const [drilldownMonth, setDrilldownMonth] = useState<string | null>(null);
 
 
@@ -117,7 +118,7 @@ export default function DashboardPage() {
         <MonthlyBillingDrilldownModal
           monthKey={drilldownMonth}
           applications={applications}
-          jobs={jobs}
+          jobs={jobsForReporting}
           onClose={() => setDrilldownMonth(null)}
         />
       )}

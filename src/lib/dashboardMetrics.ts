@@ -191,6 +191,7 @@ export type MonthDrilldownJobRow = {
   jobNumber: string;
   customer: string;
   total: number;
+  isArchived: boolean;
   payApps: MonthDrilldownPayApp[];
 };
 
@@ -203,6 +204,13 @@ export type MonthDrilldown = {
 
 // Same periodTo-bucketing as computeMonthlyBillingChart, broken out per job so
 // the sum of jobRows[].total always reconciles exactly with that month's bar.
+//
+// `jobs` must include archived jobs (not just active ones) — a billed month
+// in the past routinely includes jobs that have since been archived, and
+// those still have real names to show. Only a permanently deleted job would
+// fail to resolve here, and pay_applications rows are cascade-deleted along
+// with their job (see supabase/002_payments_tracking.sql), so that case
+// should never actually happen; "Unknown job" is just a defensive fallback.
 export function computeMonthBillingDrilldown(
   applications: PayApplication[],
   jobs: DbJob[],
@@ -228,6 +236,7 @@ export function computeMonthBillingDrilldown(
       jobNumber: job?.jobNumber ?? "",
       customer: job?.customer ?? "—",
       total: apps.reduce((sum, a) => sum + a.amountBilled, 0),
+      isArchived: Boolean(job?.archivedAt),
       payApps: [...apps]
         .sort((a, b) => a.periodTo.localeCompare(b.periodTo))
         .map((a) => ({

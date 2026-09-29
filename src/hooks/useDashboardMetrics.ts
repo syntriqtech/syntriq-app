@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useJobs } from "@/hooks/useJobs";
+import { fetchArchivedJobs, DbJob } from "@/lib/jobs";
 import {
   computeAllJobMetrics,
   computeAgingBuckets,
@@ -18,6 +19,11 @@ export function useDashboardMetrics() {
   const { jobs, isLoading: isLoadingJobs } = useJobs();
   const [jobMetrics, setJobMetrics] = useState<JobMetrics[]>([]);
   const [applications, setApplications] = useState<PayApplication[]>([]);
+  // Active + archived jobs, for resolving job names in historical billing
+  // views (e.g. the Monthly Billing drilldown) — a past month's billing
+  // routinely includes jobs that have since been archived, and `jobs` above
+  // is active-only by design (it drives the "Active jobs" cards).
+  const [archivedJobs, setArchivedJobs] = useState<DbJob[]>([]);
   const [aging, setAging] = useState<{ total: number; buckets: AgingBucket[] }>({ total: 0, buckets: [] });
   const [chart, setChart] = useState<{ monthLabels: string[]; monthKeys: string[]; billed: number[] }>({
     monthLabels: [],
@@ -40,12 +46,14 @@ export function useDashboardMetrics() {
 
     const jobMetricsPromise = jobs.length > 0 ? computeAllJobMetrics(jobs) : Promise.resolve([]);
     const activityPromise = fetchBillingActivity();
+    const archivedJobsPromise = fetchArchivedJobs();
 
-    Promise.all([jobMetricsPromise, activityPromise])
-      .then(([metrics, { applications: apps, payments }]) => {
+    Promise.all([jobMetricsPromise, activityPromise, archivedJobsPromise])
+      .then(([metrics, { applications: apps, payments }, archived]) => {
         if (cancelled) return;
         setJobMetrics(metrics);
         setApplications(apps);
+        setArchivedJobs(archived);
         setAging(computeAgingBuckets(apps, payments));
         setChart(computeMonthlyBillingChart(apps));
         setBilledMonthComparison(computeBilledMonthComparison(apps));
@@ -59,5 +67,14 @@ export function useDashboardMetrics() {
     };
   }, [jobs, reloadKey]);
 
-  return { jobMetrics, applications, aging, chart, billedMonthComparison, isLoading: isLoadingJobs || isLoadingMetrics, reload };
+  return {
+    jobMetrics,
+    applications,
+    aging,
+    chart,
+    billedMonthComparison,
+    jobsForReporting: [...jobs, ...archivedJobs],
+    isLoading: isLoadingJobs || isLoadingMetrics,
+    reload,
+  };
 }
