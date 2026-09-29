@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import Sidebar from "@/components/Sidebar";
+import DashboardPage from "@/app/(app)/dashboard/page";
 import { ANNUAL_DISCOUNT_LABEL, BillingInterval, PLAN_ANNUAL_PRICING, PLAN_LIMITS, Plan } from "@/lib/planLimits";
 
 const PLAN_COPY: Record<Plan, { name: string }> = {
@@ -54,7 +56,17 @@ export default function ChoosePlanPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-1 items-center justify-center bg-gray-50 px-4 py-12">
+    <div className="relative min-h-screen overflow-hidden bg-gray-50">
+      {/* Their real dashboard, dimmed behind the paywall — a preview of what
+          subscribing unlocks, not an interactive page (hence pointer-events-none). */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 flex select-none opacity-[0.35] blur-[1px]">
+        <Sidebar />
+        <div className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <DashboardPage />
+        </div>
+      </div>
+
+      <main className="relative flex min-h-screen flex-1 items-center justify-center bg-gray-50/70 px-4 py-12 backdrop-blur-[1px]">
       <div className="w-full max-w-3xl">
         <div className="flex flex-col items-center gap-2 text-center">
           <Image src="/SyntriqLogo2.png" alt="Syntriq" width={64} height={64} priority />
@@ -138,6 +150,7 @@ export default function ChoosePlanPage() {
           })}
         </div>
       </div>
-    </main>
+      </main>
+    </div>
   );
 }
