@@ -141,7 +141,7 @@ export function computeBilledMonthComparison(
   const sumFor = (monthKey: string) =>
     applications
       .filter((app) => app.periodTo.slice(0, 7) === monthKey)
-      .reduce((sum, app) => sum + app.amountBilled, 0);
+      .reduce((sum, app) => sum + app.currentPaymentDue, 0);
 
   const thisMonth = sumFor(thisMonthKey);
   const lastMonth = sumFor(lastMonthKey);
@@ -167,7 +167,7 @@ export function computeMonthlyBillingChart(
   const billed = months.map((month) =>
     applications
       .filter((app) => app.periodTo.slice(0, 7) === month)
-      .reduce((sum, app) => sum + app.amountBilled, 0)
+      .reduce((sum, app) => sum + app.currentPaymentDue, 0)
   );
 
   const monthLabels = months.map((m) => {
@@ -218,7 +218,7 @@ export function computeMonthBillingDrilldown(
 ): MonthDrilldown {
   // Skip $0 pay apps — they add nothing to the total and just clutter the list.
   const matches = applications.filter(
-    (app) => app.periodTo.slice(0, 7) === monthKey && app.amountBilled !== 0
+    (app) => app.periodTo.slice(0, 7) === monthKey && app.currentPaymentDue !== 0
   );
 
   const byJob = new Map<string, PayApplication[]>();
@@ -235,7 +235,7 @@ export function computeMonthBillingDrilldown(
       jobName: job?.jobName || job?.jobNumber || "Unknown job",
       jobNumber: job?.jobNumber ?? "",
       customer: job?.customer ?? "—",
-      total: apps.reduce((sum, a) => sum + a.amountBilled, 0),
+      total: apps.reduce((sum, a) => sum + a.currentPaymentDue, 0),
       isArchived: Boolean(job?.archivedAt),
       payApps: [...apps]
         .sort((a, b) => a.periodTo.localeCompare(b.periodTo))
@@ -243,7 +243,7 @@ export function computeMonthBillingDrilldown(
           id: a.id,
           applicationNumber: a.applicationNumber,
           periodTo: a.periodTo,
-          amount: a.amountBilled,
+          amount: a.currentPaymentDue,
         })),
     };
   });

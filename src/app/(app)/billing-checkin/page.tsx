@@ -507,7 +507,7 @@ export default function BillingCheckinPage() {
                   const apps = payAppsThisMonth.get(job.id) ?? [];
                   const releases = retentionReleasesThisMonth.get(job.id) ?? [];
                   const totalBilled =
-                    apps.reduce((sum, a) => sum + a.amountBilled, 0) +
+                    apps.reduce((sum, a) => sum + a.currentPaymentDue, 0) +
                     releases.reduce((sum, r) => sum + r.amountReleased, 0);
                   const allDates = [
                     ...apps.map((a) => a.applicationDate),
