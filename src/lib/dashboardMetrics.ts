@@ -125,8 +125,11 @@ export type BilledMonthComparison = {
   percentChange: number | null; // null when lastMonth is 0 — percent change is undefined
 };
 
-// Buckets by applicationDate (the "Application date" field on the form) so the
-// month a bill lands in matches what's visually on the pay application itself.
+// Buckets by periodTo, same as computeMonthlyBillingChart below — this card
+// sits right above that chart, so "this month" / "last month" here must equal
+// the chart's corresponding two bars. Used to bucket by applicationDate
+// instead, which put a bill in a different month than the chart whenever the
+// form was dated/signed after the billing period it was actually for.
 export function computeBilledMonthComparison(
   applications: PayApplication[],
   today: Date = new Date()
@@ -137,7 +140,7 @@ export function computeBilledMonthComparison(
 
   const sumFor = (monthKey: string) =>
     applications
-      .filter((app) => app.applicationDate.slice(0, 7) === monthKey)
+      .filter((app) => app.periodTo.slice(0, 7) === monthKey)
       .reduce((sum, app) => sum + app.amountBilled, 0);
 
   const thisMonth = sumFor(thisMonthKey);
