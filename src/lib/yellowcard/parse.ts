@@ -66,6 +66,18 @@ export function parseYellowcard(buffer: Buffer): ParseResult {
     throw new Error('Sheet "JOB INFO" not found — is this the Syntriq Job Import template?');
   }
 
+  // This importer only understands the exact Syntriq blank template — it reads
+  // fixed cell addresses, so any other workbook (e.g. a real CTI yellowcard,
+  // which happens to also have a "JOB INFO" sheet) will silently land its data
+  // in the wrong fields instead of erroring out. Check for the template's own
+  // marker text before trusting the fixed addresses.
+  const templateMarker = str(sheet, "A1");
+  if (!templateMarker.toUpperCase().includes("SYNTRIQ")) {
+    throw new Error(
+      'This doesn\'t look like the Syntriq Job Import template, so its fields can\'t be read reliably. Download the blank template from the "Job Import" button and copy your data into it, or use "Job Import (AI)" instead — it can read your billing workbook or yellowcard as-is.'
+    );
+  }
+
   // ── Project & site ───────────────────────────────────────────────────────
   const jobName                = str(sheet, "E6");
   const jobNumber               = str(sheet, "E7");

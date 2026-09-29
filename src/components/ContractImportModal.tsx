@@ -36,7 +36,7 @@ export default function ContractImportModal({ onFile, onClose, isImporting }: Pr
       >
         <div className="flex items-start justify-between border-b border-gray-100 px-6 py-4">
           <div>
-            <h2 className="text-lg font-bold text-navy">Import Contract (AI)</h2>
+            <h2 className="text-lg font-bold text-navy">Job Import (AI)</h2>
             <p className="mt-0.5 text-sm text-gray-500">
               Upload the signed contract as a PDF or photo, or your billing workbook as an Excel
               file, and Syntriq will read it with AI to pre-fill this form.

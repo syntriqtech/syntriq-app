@@ -426,7 +426,7 @@ export default function JobSetupPage() {
             disabled={isExtracting}
             className="rounded-lg border border-teal px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/10 disabled:opacity-50"
           >
-            {isExtracting ? "Reading contract…" : "Import Contract (AI)"}
+            {isExtracting ? "Reading contract…" : "Job Import (AI)"}
           </button>
         </div>
       </div>
@@ -931,7 +931,7 @@ export default function JobSetupPage() {
       )}
 
       {showProUpgrade && (
-        <ProUpgradeModal featureName="Import Contract (AI)" onClose={() => setShowProUpgrade(false)} />
+        <ProUpgradeModal featureName="Job Import (AI)" onClose={() => setShowProUpgrade(false)} />
       )}
 
       {showCreatedToast && (

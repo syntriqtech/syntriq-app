@@ -7,9 +7,12 @@ import Button from "@/components/Button";
 import { createJob } from "@/lib/jobs";
 import { useJobs } from "@/hooks/useJobs";
 import { fetchBillingPlatforms, addBillingPlatform } from "@/lib/billingPlatformsDb";
+import { fetchGeneralContractors, createGeneralContractor, GeneralContractor } from "@/lib/generalContractorsDb";
+import { findBestGcMatch } from "@/lib/gcFuzzyMatch";
 import type { ParseResult } from "@/lib/yellowcard/parse";
 import { SOVLineItem } from "@/lib/sovData";
 import { saveSovItems } from "@/lib/sovLineItemsDb";
+import GCCombobox from "@/components/GCCombobox";
 
 const SESSION_KEY = "yellowcard_draft";
 
@@ -55,6 +58,7 @@ type FormState = {
   billingDueDay: string;
   billingCheckinMonth: string;
   billingPlatform: string;
+  gcId: string | null;
 };
 
 export default function ImportReviewPage() {
@@ -64,12 +68,45 @@ export default function ImportReviewPage() {
   const [form, setForm] = useState<FormState | null>(null);
   const [lineItems, setLineItems] = useState<SOVLineItem[]>([]);
   const [billingPlatforms, setBillingPlatforms] = useState<string[]>([]);
+  const [gcs, setGcs] = useState<GeneralContractor[]>([]);
+  const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchBillingPlatforms().then(setBillingPlatforms).catch(() => {});
+    fetchGeneralContractors().then(setGcs).catch(() => {});
   }, []);
+
+  function handleSelectGc(gc: GeneralContractor) {
+    setForm((prev) =>
+      prev
+        ? {
+            ...prev,
+            customer: gc.name,
+            gcId: gc.id,
+            customerAddress: prev.customerAddress.trim() ? prev.customerAddress : gc.billingAddress,
+            paymentTerms: prev.paymentTerms.trim() ? prev.paymentTerms : gc.paymentTerms,
+            retentionRateCW:
+              prev.retentionRateCW.trim() === "" && gc.defaultRetentionPct != null
+                ? String(gc.defaultRetentionPct)
+                : prev.retentionRateCW,
+            retentionRateSM:
+              prev.retentionRateSM.trim() === "" && gc.defaultRetentionPct != null
+                ? String(gc.defaultRetentionPct)
+                : prev.retentionRateSM,
+            billingPlatform: prev.billingPlatform.trim() ? prev.billingPlatform : gc.billingPlatform,
+          }
+        : prev
+    );
+    setSuggestionDismissed(true);
+  }
+
+  async function handleCreateGc(input: Parameters<typeof createGeneralContractor>[0]) {
+    const gc = await createGeneralContractor(input);
+    setGcs((prev) => [...prev, gc].sort((a, b) => a.name.localeCompare(b.name)));
+    return gc;
+  }
 
   useEffect(() => {
     try {
@@ -103,6 +140,7 @@ export default function ImportReviewPage() {
         billingDueDay:              String(job.billingDueDay || 15),
         billingCheckinMonth:        job.billingCheckinMonth || new Date().toISOString().slice(0, 7),
         billingPlatform:            job.billingPlatform,
+        gcId:                       null,
       });
       setLineItems(
         data.sovLineItems.map((line) => ({
@@ -150,6 +188,11 @@ export default function ImportReviewPage() {
     if (!form) return;
     setSaveError(null);
 
+    if (!form.gcId) {
+      setSaveError('Confirm the matched GC, pick an existing one, or add it as new, in the "Customer (GC)" field before confirming.');
+      return;
+    }
+
     const duplicate = jobs.find((j) => j.jobNumber === form.jobNumber);
     if (duplicate) {
       setSaveError(`Job # "${form.jobNumber}" is already in use by "${duplicate.customer}". Change the Job # above before confirming.`);
@@ -175,7 +218,7 @@ export default function ImportReviewPage() {
         jobNumber:              form.jobNumber,
         customer:               form.customer,
         customerAddress:        form.customerAddress,
-        gcId:                   null,
+        gcId:                   form.gcId,
         paymentTerms:           form.paymentTerms,
         owner:                  form.owner,
         ownerAddress:           form.ownerAddress,
@@ -244,10 +287,12 @@ export default function ImportReviewPage() {
   }
 
   const { warnings } = parsed;
+  const suggestedGc =
+    !form.gcId && !suggestionDismissed ? findBestGcMatch(form.customer, gcs)?.gc ?? null : null;
   const missingRequiredLabels: string[] = [];
   if (!form.jobName.trim()) missingRequiredLabels.push("Job Name");
   if (!form.jobNumber.trim()) missingRequiredLabels.push("Job #");
-  if (!form.customer.trim()) missingRequiredLabels.push("Customer (GC)");
+  if (!form.gcId) missingRequiredLabels.push("Customer (GC) — confirm a match or add new");
   if (!form.customerAddress.trim()) missingRequiredLabels.push("Customer billing address");
   if (!form.jobAddress.trim()) missingRequiredLabels.push("Job / site address");
   if (!form.contractFor.trim()) missingRequiredLabels.push("Contract for (scope of work)");
@@ -315,13 +360,46 @@ export default function ImportReviewPage() {
             value={form.architectProjectNumber}
             onChange={(e) => handleChange("architectProjectNumber", e.target.value)}
           />
-          <TextField
-            label="Customer (GC) *"
-            id="customer"
-            required
-            value={form.customer}
-            onChange={(e) => handleChange("customer", e.target.value)}
-          />
+          <div>
+            <GCCombobox
+              id="customer"
+              label="Customer (GC) *"
+              gcs={gcs}
+              query={form.customer}
+              selectedId={form.gcId}
+              onQueryChange={(value) => {
+                handleChange("customer", value);
+                setForm((prev) => (prev ? { ...prev, gcId: null } : prev));
+                setSuggestionDismissed(false);
+              }}
+              onSelect={handleSelectGc}
+              onCreate={handleCreateGc}
+              required
+            />
+            {suggestedGc && !form.gcId && (
+              <div className="mt-2 rounded-lg border border-teal/30 bg-teal/5 p-3">
+                <p className="text-sm text-navy">
+                  Is this the same GC as a saved record: <span className="font-semibold">{suggestedGc.name}</span>?
+                </p>
+                <div className="mt-2 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectGc(suggestedGc)}
+                    className="text-sm font-semibold text-teal hover:underline"
+                  >
+                    Yes, this is {suggestedGc.name}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSuggestionDismissed(true)}
+                    className="text-sm font-semibold text-gray-500 hover:underline"
+                  >
+                    No — pick a different GC or add new
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <TextField
             label="Customer billing address *"
             id="customerAddress"
