@@ -46,9 +46,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  if (user && isLoginPage) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
-  }
+  // No forced redirect away from the login page for a signed-in visitor:
+  // the page itself now shows "signed in as X — continue / log out", which
+  // lets someone switch accounts without having to clear cookies by hand.
 
   // Gate every protected page behind company setup until the profile's
   // required fields are filled in. Exempt the setup wizard itself (or the
@@ -67,7 +67,15 @@ export async function proxy(request: NextRequest) {
   // invited team member into the wizard forever, since they join an org
   // that already has a completed profile but never get a personal row of
   // their own.
-  if (user && !isApiRoute && !isCompanySetupPage && !isResetPasswordPage && !isAcceptInvitePage && !isTermsPage) {
+  if (
+    user &&
+    !isApiRoute &&
+    !isLoginPage &&
+    !isCompanySetupPage &&
+    !isResetPasswordPage &&
+    !isAcceptInvitePage &&
+    !isTermsPage
+  ) {
     const { data: hasCompletedSetup } = await supabase.rpc("has_completed_company_setup");
 
     if (!hasCompletedSetup) {
@@ -94,6 +102,7 @@ export async function proxy(request: NextRequest) {
   // the gate above.
   if (
     user &&
+    !isLoginPage &&
     !isCompanySetupPage &&
     !isChoosePlanPage &&
     !isResetPasswordPage &&

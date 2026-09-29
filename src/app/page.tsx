@@ -52,6 +52,39 @@ function LoginPageContent() {
   const [isCheckingInvite, setIsCheckingInvite] = useState(Boolean(inviteToken));
   const [inviteError, setInviteError] = useState<string | null>(null);
 
+  // The middleware no longer force-redirects a signed-in visitor away from
+  // this page, so if they land here with a stale/existing session (e.g. via
+  // the marketing site's Login button), we show that plainly instead of
+  // silently taking them into the app — with a one-click way to log out and
+  // sign into a different account. Skipped for invite links: the invite
+  // flow above already decides what to show.
+  const [existingSessionEmail, setExistingSessionEmail] = useState<string | null>(null);
+  const [isCheckingSession, setIsCheckingSession] = useState(!inviteToken);
+
+  useEffect(() => {
+    if (inviteToken) return;
+    let cancelled = false;
+
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        if (!cancelled) setExistingSessionEmail(data.user?.email ?? null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsCheckingSession(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inviteToken]);
+
+  async function handleLogoutAndSwitch() {
+    await supabase.auth.signOut();
+    setExistingSessionEmail(null);
+  }
+
   useEffect(() => {
     if (!inviteToken) return;
     let cancelled = false;
@@ -249,10 +282,43 @@ function LoginPageContent() {
     router.refresh();
   }
 
-  if (isCheckingInvite) {
+  if (isCheckingInvite || isCheckingSession) {
     return (
       <main className="flex min-h-screen flex-1 items-center justify-center bg-gray-50 px-4">
-        <p className="text-sm text-gray-500">Checking your invite…</p>
+        <p className="text-sm text-gray-500">
+          {isCheckingInvite ? "Checking your invite…" : "Checking your session…"}
+        </p>
+      </main>
+    );
+  }
+
+  if (existingSessionEmail) {
+    return (
+      <main className="flex min-h-screen flex-1 items-center justify-center bg-gray-50 px-4">
+        <div className="w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-8 text-center shadow-sm">
+          <div className="flex flex-col items-center gap-2">
+            <Image src="/SyntriqLogo2.png" alt="Syntriq" width={96} height={96} priority />
+            <h1 className="mt-2 text-xl font-semibold text-navy">You&apos;re already signed in</h1>
+            <p className="text-center text-sm text-gray-500">
+              Signed in as <strong className="text-navy">{existingSessionEmail}</strong>
+            </p>
+          </div>
+
+          <div className="mt-6 flex flex-col gap-3">
+            <Button
+              type="button"
+              onClick={() => {
+                router.push("/dashboard");
+                router.refresh();
+              }}
+            >
+              Continue to dashboard
+            </Button>
+            <button type="button" onClick={handleLogoutAndSwitch} className="text-sm text-teal hover:underline">
+              Log out and use a different account
+            </button>
+          </div>
+        </div>
       </main>
     );
   }
