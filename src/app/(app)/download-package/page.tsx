@@ -17,6 +17,7 @@ import { LienWaiverKind } from "@/lib/lienWaiverPdf";
 import { BillingFormTemplate, fetchBillingFormTemplates, downloadBillingFormTemplateFile } from "@/lib/billingFormTemplatesDb";
 import { BillingWorkbookMapping, fillBillingWorkbook } from "@/lib/billingWorkbookFill";
 import { BillingPdfMapping, fillBillingPdf } from "@/lib/billingPdfFill";
+import { AxisBillingPdfData, fillAxisBillingPdf } from "@/lib/axisBillingPdfFill";
 import { downloadPdfBlob } from "@/lib/billingPackagePdf";
 import { fetchGeneralContractors, GeneralContractor } from "@/lib/generalContractorsDb";
 import TextField from "@/components/TextField";
@@ -94,6 +95,10 @@ export default function DownloadPackagePage() {
   // signature the default package uses, unlike the Excel path above, which
   // doesn't sign anything yet.
   const isPdfCustomMode = (selectedTemplate?.fieldMapping as { kind?: string } | null)?.kind === "pdf";
+  // Axis Mechanical's fillable PDF — no signature field on the page we fill
+  // (only page 2, not output yet, has one), so it's intentionally excluded
+  // from isPdfCustomMode's signature requirement below.
+  const isAxisPdfMode = (selectedTemplate?.fieldMapping as { kind?: string } | null)?.kind === "pdf-axis";
 
   useEffect(() => {
     fetchBillingFormTemplates().then(setBillingFormTemplates).catch(() => {});
@@ -209,6 +214,17 @@ export default function DownloadPackagePage() {
   const prevCertificates = previousCertificates(allLines, cwRate);
   const suggestedAmountDue = totalEarnedLessRetainage - prevCertificates;
 
+  // Axis's own form computes "amount due" with one flat retention rate
+  // (line6 x job.retentionRateCW) rather than G702's split CW/SM retention
+  // and previous-certificates math — the two agree whenever there's no
+  // stored materials or retention release, but can drift otherwise. Shown
+  // as a non-blocking heads-up rather than gating generation, per the spec.
+  const previouslyBilledGross = allLines.reduce((sum, line) => sum + line.previousApplications, 0);
+  const approvedChangeOrderAmount = changeOrders.reduce((sum, co) => sum + co.scheduledValue, 0);
+  const axisAmountThisRequest = totals.totalCompleted - previouslyBilledGross;
+  const axisAmountDue = axisAmountThisRequest - axisAmountThisRequest * cwRate;
+  const axisAmountDueMismatch = isAxisPdfMode && Math.abs(axisAmountDue - suggestedAmountDue) > 0.01;
+
   function toggleWaiver(kind: LienWaiverKind) {
     setSelectedWaivers((prev) => (prev.includes(kind) ? prev.filter((k) => k !== kind) : [...prev, kind]));
   }
@@ -311,10 +327,50 @@ export default function DownloadPackagePage() {
     downloadPdfBlob(filled, `${job.jobNumber}-billing-form-${kindLabel}-app${applicationNumber}.pdf`);
   }
 
+  // Custom Billing Forms path for Axis Mechanical's fillable PDF — no
+  // signature (not mapped on the page we output), downloaded directly like
+  // the other custom-form paths above.
+  async function handleDownloadAxisPdf() {
+    if (!job || !selectedTemplate?.filePath || !selectedTemplate?.fieldMapping) return;
+
+    const pmContact = job.ctiPm
+      ? profile?.contactPhone
+        ? `${job.ctiPm}, ${profile.contactPhone}`
+        : job.ctiPm
+      : profile?.contactPhone ?? "";
+
+    const data: AxisBillingPdfData = {
+      applicationNumber,
+      applicationDate,
+      invoiceNumber: `${job.jobNumber}-${applicationNumber}`,
+      gcProjectNumber: job.architectProjectNumber ?? "",
+      jobName: job.jobName,
+      jobAddress: job.jobAddress,
+      internalJobNumber: job.jobNumber,
+      subcontractorName: profile?.companyName ?? "",
+      subcontractorAddress: profile?.companyAddress ?? "",
+      subcontractorContact: pmContact,
+      originalContractValue: job.contractValue,
+      approvedChangeOrderCount: changeOrders.length,
+      approvedChangeOrderAmount,
+      completedToDate: totals.totalCompleted,
+      previouslyBilled: previouslyBilledGross,
+      retentionRatePct: job.retentionRateCW,
+    };
+
+    const templateBuffer = await downloadBillingFormTemplateFile(selectedTemplate.filePath);
+    const filled = await fillAxisBillingPdf(templateBuffer, data);
+    downloadPdfBlob(filled, `${job.jobNumber}-axis-billing-form-app${applicationNumber}.pdf`);
+  }
+
   async function handleDownload() {
     if (!job) return;
     setIsGenerating(true);
     try {
+      if (isAxisPdfMode) {
+        await handleDownloadAxisPdf();
+        return;
+      }
       if (isPdfCustomMode) {
         await handleDownloadCustomPdf();
         return;
@@ -544,7 +600,7 @@ export default function DownloadPackagePage() {
         </p>
       </div>
 
-      {isCustomMode && !isPdfCustomMode && (
+      {isCustomMode && !isPdfCustomMode && !isAxisPdfMode && (
         <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
           <h2 className="text-sm font-semibold text-gray-500">2. Custom billing form</h2>
           <p className="mt-1 text-sm text-gray-500">
@@ -552,6 +608,23 @@ export default function DownloadPackagePage() {
             ({selectedTemplate?.fileName}) with this job&apos;s data instead of the default PDF package. Lien
             waivers and signatures aren&apos;t part of this yet.
           </p>
+        </div>
+      )}
+      {isAxisPdfMode && (
+        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+          <h2 className="text-sm font-semibold text-gray-500">2. Custom billing form</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            This will fill <span className="font-medium text-navy">{selectedTemplate?.name}</span>{" "}
+            with this job&apos;s data instead of the default PDF package. Lien waivers and signatures aren&apos;t
+            part of this yet.
+          </p>
+          {axisAmountDueMismatch && (
+            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Heads up: Axis&apos;s Amount Due ({axisAmountDue.toLocaleString("en-US", { style: "currency", currency: "USD" })}) doesn&apos;t
+              match this job&apos;s G702 current payment due ({suggestedAmountDue.toLocaleString("en-US", { style: "currency", currency: "USD" })}).
+              This usually means stored materials or a retention release are involved — double-check before sending.
+            </p>
+          )}
         </div>
       )}
       {isPdfCustomMode && (
