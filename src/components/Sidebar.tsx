@@ -12,6 +12,8 @@ import { useBillingCheckinBadge } from "@/hooks/useBillingCheckinBadge";
 import { useSidebarPrefs } from "@/hooks/useSidebarPrefs";
 import { fetchOrganizationMembers } from "@/lib/organizationMembersDb";
 import { getCurrentUserContext } from "@/lib/currentUserContext";
+import { isAdminEmail } from "@/lib/adminEmails";
+import { createClient } from "@/lib/supabase/client";
 
 type NavItem = {
   label: string;
@@ -116,6 +118,18 @@ export default function Sidebar() {
       .catch(() => {});
   }, []);
 
+  // Platform admin — separate from the per-org "owner" role above. Checked
+  // by email (see src/lib/adminEmails.ts), not org membership, since this
+  // nav item leads to data across every company, not just the signed-in
+  // user's own.
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  useEffect(() => {
+    createClient()
+      .auth.getUser()
+      .then(({ data }) => setIsPlatformAdmin(isAdminEmail(data.user?.email)))
+      .catch(() => {});
+  }, []);
+
   const [editMode, setEditMode] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
@@ -130,10 +144,10 @@ export default function Sidebar() {
   // Apply saved order on top of the canonical DEFAULT_NAV_ITEMS list.
   // Any new items added to DEFAULT_NAV_ITEMS that aren't in the saved order
   // are appended at the end so they automatically show up for existing users.
-  const navItems = useMemo<NavItem[]>(
-    () => (isOwner ? DEFAULT_NAV_ITEMS : DEFAULT_NAV_ITEMS.filter((item) => item.href !== "/activity")),
-    [isOwner]
-  );
+  const navItems = useMemo<NavItem[]>(() => {
+    const base = isOwner ? DEFAULT_NAV_ITEMS : DEFAULT_NAV_ITEMS.filter((item) => item.href !== "/activity");
+    return isPlatformAdmin ? [...base, { label: "Admin", href: "/admin" }] : base;
+  }, [isOwner, isPlatformAdmin]);
 
   const orderedItems = useMemo<NavItem[]>(() => {
     if (tabOrder.length === 0) return navItems;
