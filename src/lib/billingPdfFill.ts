@@ -205,7 +205,14 @@ function fieldTextBounds(rectWidth: number, rectHeight: number) {
 // layoutSinglelineText (the same routine pdf-lib's fallback uses) so each
 // field keeps sizing itself to its own box, and then add FONT_SIZE_BUMP on
 // top, per Jason's ask to make the filled-in text a point bigger overall.
-function setText(doc: PDFDocument, page: PDFPage, font: PDFFont, name: string | undefined, value: string) {
+function setText(
+  doc: PDFDocument,
+  page: PDFPage,
+  font: PDFFont,
+  name: string | undefined,
+  value: string,
+  extraBump = 0
+) {
   if (!name) return;
   const widget = findWidgetByName(doc, page, name);
   if (!widget) return;
@@ -214,7 +221,7 @@ function setText(doc: PDFDocument, page: PDFPage, font: PDFFont, name: string | 
     const [x0, y0, x1, y1] = rectArr.asArray().map((n) => (n as PDFNumber).asNumber());
     const bounds = fieldTextBounds(x1 - x0, y1 - y0);
     const { fontSize } = layoutSinglelineText(value, { alignment: TextAlignment.Left, font, bounds });
-    widget.dict.set(PDFName.of("DA"), PDFString.of(`0 g /Helvetica ${fontSize + FONT_SIZE_BUMP} Tf`));
+    widget.dict.set(PDFName.of("DA"), PDFString.of(`0 g /Helvetica ${fontSize + FONT_SIZE_BUMP + extraBump} Tf`));
   }
   widget.dict.set(PDFName.of("V"), PDFHexString.fromText(value));
   // COBE's own fields are merged single dicts (field + widget in one
@@ -347,7 +354,9 @@ export async function fillBillingPdf(templateBuffer: ArrayBuffer, mapping: Billi
     requestedTotal += requested;
   }
   for (let i = 0; i < f.changeOrderLabels.length; i++) {
-    setText(doc, page, font, f.changeOrderLabels[i], CHANGE_ORDER_LABELS[i]);
+    // +2pt over every other field's bump — Jason's ask, these specifically
+    // read small next to the Base row above them.
+    setText(doc, page, font, f.changeOrderLabels[i], CHANGE_ORDER_LABELS[i], 2);
   }
 
   let netTotal = requestedTotal;
