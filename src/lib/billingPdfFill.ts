@@ -49,11 +49,18 @@ export type BillingPdfMapping = {
     phone: string;
     baseContractedAmount: string;
     baseRequestedPayment: string;
+    // The row's own label ("Base", "Change Order #1", etc.) — these are
+    // real editable fields (added by scripts/setup-cobe-billing-template.mjs,
+    // not baked page text), pre-filled with the default label each time but
+    // left open for the sub to retype (e.g. "Change Order #17") in whatever
+    // PDF viewer they open the download in.
+    baseLabel: string;
     // Up to 5 slots: 4 numbered Change Order rows + one blank catch-all row
     // for any change orders beyond the 4th (their amounts are summed
     // together into that last slot).
     changeOrderContracted: string[];
     changeOrderRequested: string[];
+    changeOrderLabels: string[];
     subtotal?: string;
     retention?: string;
     netTotal: string;
@@ -210,7 +217,26 @@ function setText(doc: PDFDocument, page: PDFPage, font: PDFFont, name: string | 
     widget.dict.set(PDFName.of("DA"), PDFString.of(`0 g /Helvetica ${fontSize + FONT_SIZE_BUMP} Tf`));
   }
   widget.dict.set(PDFName.of("V"), PDFHexString.fromText(value));
-  doc.getForm().markFieldAsDirty(widget.ref);
+  // COBE's own fields are merged single dicts (field + widget in one
+  // object, the only shape the rest of this file was written against) —
+  // but a field pdf-lib itself creates (form.createTextField(), used for
+  // the editable row-label fields below) comes out as a separate
+  // parent/child pair instead: a /Fields-level field dict holding /V, plus
+  // a child widget annotation that only has /Parent. Readers (and
+  // updateFieldAppearances() below) resolve a field's value and its dirty
+  // state from that parent ref, not the child widget's — /V written only
+  // on the widget, and markFieldAsDirty() called with the widget's ref,
+  // are both silently ignored for this shape. Write /V on /Parent too and
+  // mark /Parent's ref dirty instead whenever one exists; both are no-ops
+  // for the merged (no /Parent) case, so this doesn't change behavior for
+  // any of COBE's own fields.
+  const parentRef = widget.dict.get(PDFName.of("Parent"));
+  const fieldRef = parentRef instanceof PDFRef ? parentRef : widget.ref;
+  if (parentRef instanceof PDFRef) {
+    const parent = doc.context.lookup(parentRef, PDFDict);
+    parent.set(PDFName.of("V"), PDFHexString.fromText(value));
+  }
+  doc.getForm().markFieldAsDirty(fieldRef);
 }
 
 // The dollar-amount cells in COBE's table render at wildly different sizes
@@ -297,9 +323,14 @@ export async function fillBillingPdf(templateBuffer: ArrayBuffer, mapping: Billi
   matchRectHeight(doc, page, f.baseContractedAmount, f.baseRequestedPayment);
   setCurrencyText(doc, page, f.baseContractedAmount, currency(data.job.contractValue));
   setCurrencyText(doc, page, f.baseRequestedPayment, currency(data.baseThisPeriod));
+  setText(doc, page, font, f.baseLabel, "Base");
 
   // First 4 change orders fill their own numbered row; anything beyond that
-  // gets combined into the form's one blank catch-all row.
+  // gets combined into the form's one blank catch-all row. Row labels are
+  // always (re)written to their default text on every generation — if the
+  // sub retyped one on a prior download (e.g. "Change Order #17"), that edit
+  // lived in that one downloaded file, not back in the template.
+  const CHANGE_ORDER_LABELS = ["Change Order #1", "Change Order #2", "Change Order #3", "Change Order #4", "Change Order #_"];
   const numberedCount = Math.min(data.changeOrders.length, 4);
   let requestedTotal = data.baseThisPeriod;
   for (let i = 0; i < numberedCount; i++) {
@@ -314,6 +345,9 @@ export async function fillBillingPdf(templateBuffer: ArrayBuffer, mapping: Billi
     setCurrencyText(doc, page, f.changeOrderContracted[4], currency(contracted));
     setCurrencyText(doc, page, f.changeOrderRequested[4], currency(requested));
     requestedTotal += requested;
+  }
+  for (let i = 0; i < f.changeOrderLabels.length; i++) {
+    setText(doc, page, font, f.changeOrderLabels[i], CHANGE_ORDER_LABELS[i]);
   }
 
   let netTotal = requestedTotal;

@@ -42,6 +42,22 @@ Supabase's/Cloudflare's edge cache for every viewer (observed stale downloads se
 confirmed-fresh upload, on a delay that varied by request origin); a new path has nothing to be
 stale. Bump the version suffix again if the template file ever needs to change.
 
+## Editable row labels
+
+The "Base" / "Change Order #1"–"#4" / "Change Order #_" row labels in the table's left column
+were originally baked page text in COBE's own template (not form fields) — Jason asked for them
+to stay editable so a real GC-assigned change-order number (e.g. "Change Order #17") can be
+written in after download instead of Syntriq's own 1st/2nd/3rd/4th ordering. `addEditableLabelFields()`
+in `scripts/setup-cobe-billing-template.mjs` erases the original baked text (a white rect) and
+replaces it with a real AcroForm text field at the same position, named `Base Label p16`/
+`CO1 Label p16`…`CO_ Label p16` (and the `p17` equivalents on Final) — rects hand-measured
+against the actual source PDF via a one-off pdfjs-dist text-position dump, cross-checked against
+the neighboring money fields' own Rects for exact row alignment, with the right edge stopping a
+couple points short of the Contracted Amount column so the field never crosses that column's grid
+line. `fillBillingPdf()` (billingPdfFill.ts) re-writes each one to its default label text on every
+generated PDF — any retype the sub does in their own PDF viewer lives in that one downloaded file,
+not back in the stored template.
+
 ## Filled fields (Progress page)
 
 | PDF field name | Syntriq source |
@@ -103,3 +119,15 @@ Contracted Amount alignment, uniform currency font sizing, and (after the collis
 Final-page field actually filling in were all specifically re-checked live, not just in isolated
 scripts. Ready to use from Download Package → "Billing form" ▸ COBE — Progress Payment /
 COBE — Final Payment.
+
+**2026-10-25 update:** Added the editable row-label fields described above (template bumped to
+`cobe-billing-form-v3.pdf`) and re-provisioned both orgs. Verified three ways before touching
+production: (1) rendered the modified template via PyMuPDF to confirm the label fields sit exactly
+over the original text with no grid-line or alignment damage, (2) caught and fixed a real bug where
+pdf-lib's `createTextField()` builds an unmerged parent/child field (unlike every other field in
+this doc, which COBE's own tooling built as merged single dicts) — writes and dirty-marking had to
+target the parent ref or they were silently dropped, confirmed by reading the value back
+programmatically before and after the fix — and (3) ran the actual compiled `fillBillingPdf()`
+(not a reimplementation) against realistic job data via `tsx` and rendered the result, which came
+out pixel-consistent with the original. `src/lib/billingPdfFill.ts`'s `setText()` now handles both
+field shapes generically, so this also covers any future field added the same way.

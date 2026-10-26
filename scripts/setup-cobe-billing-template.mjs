@@ -10,7 +10,7 @@
 //
 // Usage: node --env-file=.env.local scripts/setup-cobe-billing-template.mjs <organizationId>
 
-import { PDFDocument, PDFName, PDFDict, PDFRef, PDFHexString, PDFString } from "pdf-lib";
+import { PDFDocument, PDFName, PDFDict, PDFRef, PDFHexString, PDFString, StandardFonts, rgb } from "pdf-lib";
 import { createClient } from "@supabase/supabase-js";
 import fs from "fs";
 
@@ -54,6 +54,57 @@ const RENAME_ON_FINAL = [
   "Claimant's Title",
 ];
 
+// The "Base"/"Change Order #1"..."#4"/"Change Order #_" row labels in the
+// left column of the table are static page content in COBE's original
+// template, not form fields — Jason wants them editable (e.g. to write in
+// the GC's real change-order number, like "Change Order #17", instead of
+// Syntriq's own 1st/2nd/3rd/4th ordering). Rects hand-measured against the
+// actual source PDF (pdfjs-dist text-position dump cross-checked against
+// the neighboring money fields' own Rects, which share the same row
+// y-bounds) — x1 stops a couple points short of the Contracted Amount
+// column (x≈280–282) so the field never crosses that column's grid line.
+// Progress and Final share the same x-range (COBE copy-pasted the page) but
+// differ in y since Final drops the Subtotal/Retention rows above.
+const PROGRESS_LABEL_ROWS = [
+  { suffix: "Base", text: "Base", rect: [197, 552, 278, 566] },
+  { suffix: "CO1", text: "Change Order #1", rect: [197, 535.9039, 278, 547.5095] },
+  { suffix: "CO2", text: "Change Order #2", rect: [197, 520.8167, 278, 532.4222] },
+  { suffix: "CO3", text: "Change Order #3", rect: [197, 506.1163, 278, 517.7219] },
+  { suffix: "CO4", text: "Change Order #4", rect: [197, 491.0291, 278, 502.6346] },
+  { suffix: "CO_", text: "Change Order #_", rect: [197, 475.9419, 278, 487.5474] },
+];
+
+const FINAL_LABEL_ROWS = [
+  { suffix: "Base", text: "Base", rect: [197, 544, 278, 558] },
+  { suffix: "CO1", text: "Change Order #1", rect: [197, 528.5537, 278, 540.1593] },
+  { suffix: "CO2", text: "Change Order #2", rect: [197, 513.4665, 278, 525.0721] },
+  { suffix: "CO3", text: "Change Order #3", rect: [197, 498.3793, 278, 509.9848] },
+  { suffix: "CO4", text: "Change Order #4", rect: [197, 483.6789, 278, 494.8976] },
+  { suffix: "CO_", text: "Change Order #_", rect: [197, 468.5917, 278, 480.1972] },
+];
+
+const LABEL_FONT_SIZE = 9.75; // matches the baked-in label text it replaces
+
+// Draws a white rect over the old baked-in label text (erasing it) and adds
+// a real AcroForm text field in its place, pre-filled with that same text.
+// Must run on the ORIGINAL (untrimmed, 19-page) doc/page indices, same as
+// renameFinalPageCollisions — see the comment on that call in
+// buildTrimmedTemplate for why.
+function addEditableLabelFields(doc, font, pageIndex, rows, pageSuffix) {
+  const page = doc.getPage(pageIndex);
+  const form = doc.getForm();
+  for (const row of rows) {
+    const [x0, y0, x1, y1] = row.rect;
+    page.drawRectangle({ x: x0, y: y0, width: x1 - x0, height: y1 - y0, color: rgb(1, 1, 1) });
+    const field = form.createTextField(`${row.suffix} Label ${pageSuffix}`);
+    // Order matters: addToPage() is what gives the field its /DA entry —
+    // setFontSize() throws MissingDAEntryError if called before it.
+    field.addToPage(page, { x: x0, y: y0, width: x1 - x0, height: y1 - y0, font, borderWidth: 0 });
+    field.setFontSize(LABEL_FONT_SIZE);
+    field.setText(row.text);
+  }
+}
+
 function fieldNameOf(doc, dict) {
   const t = dict.get(PDFName.of("T"));
   if (t instanceof PDFHexString || t instanceof PDFString) return t.decodeText();
@@ -82,12 +133,15 @@ function renameFinalPageCollisions(doc, pageIndex) {
 async function buildTrimmedTemplate() {
   const bytes = fs.readFileSync(SOURCE_PDF);
   const doc = await PDFDocument.load(bytes);
-  // Renaming must happen BEFORE any removePage() call below: pdf-lib's
-  // removePage() doesn't invalidate PDFDocument's internal page cache, so
-  // doc.getPage(n) after even one removal silently returns a stale,
-  // pre-removal page list — renaming here first, while the original
-  // 19-page indices are still accurate, sidesteps that entirely.
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  // Renaming/field-adding must happen BEFORE any removePage() call below:
+  // pdf-lib's removePage() doesn't invalidate PDFDocument's internal page
+  // cache, so doc.getPage(n) after even one removal silently returns a
+  // stale, pre-removal page list — doing both here first, while the
+  // original 19-page indices are still accurate, sidesteps that entirely.
   renameFinalPageCollisions(doc, FINAL_PAGE_INDEX_IN_SOURCE);
+  addEditableLabelFields(doc, font, PROGRESS_PAGE_INDEX_IN_SOURCE, PROGRESS_LABEL_ROWS, "p16");
+  addEditableLabelFields(doc, font, FINAL_PAGE_INDEX_IN_SOURCE, FINAL_LABEL_ROWS, "p17");
   const total = doc.getPageCount();
   for (let i = total - 1; i >= 0; i--) {
     if (i !== PROGRESS_PAGE_INDEX_IN_SOURCE && i !== FINAL_PAGE_INDEX_IN_SOURCE) doc.removePage(i);
@@ -111,8 +165,10 @@ const progressMapping = {
     phone: "Phone p16",
     baseContractedAmount: "Base Contracted Amount p16",
     baseRequestedPayment: "$389,270.00",
+    baseLabel: "Base Label p16",
     changeOrderContracted: ["Change Order #1", "Change Order #2", "Change Order #3", "Change Order #4", "Change Order #"],
     changeOrderRequested: ["Payment", "Text61", "Text63", "Text65", "Text67"],
+    changeOrderLabels: ["CO1 Label p16", "CO2 Label p16", "CO3 Label p16", "CO4 Label p16", "CO_ Label p16"],
     subtotal: "Subtotal",
     retention: "10% Retention",
     netTotal: "Net Total To Be Paid",
@@ -147,6 +203,7 @@ const finalMapping = {
     phone: "Phone p17",
     baseContractedAmount: "Base Contracted Amount p17",
     baseRequestedPayment: "$389,270.00 p17",
+    baseLabel: "Base Label p17",
     changeOrderContracted: [
       "Change Order #1 p17",
       "Change Order #2 p17",
@@ -155,6 +212,7 @@ const finalMapping = {
       "Change Order # p17",
     ],
     changeOrderRequested: ["Payment p17", "Text84", "Text86", "Text88", "Text90"],
+    changeOrderLabels: ["CO1 Label p17", "CO2 Label p17", "CO3 Label p17", "CO4 Label p17", "CO_ Label p17"],
     netTotal: "Net Total To Be Paid p17",
     amountOfCheck: "Amount of Check: $ p17",
     checkPayableTo: "Check Payable To p17",
@@ -178,7 +236,7 @@ async function main() {
   // cache for everyone (observed stale downloads served well after a
   // fresh upload, on a delay that varies by edge location) — a brand new
   // path has nothing to be stale.
-  const filePath = `${organizationId}/cobe-billing-form-v2.pdf`;
+  const filePath = `${organizationId}/cobe-billing-form-v3.pdf`;
 
   const { error: uploadError } = await supabase.storage
     .from("billing-form-templates")
