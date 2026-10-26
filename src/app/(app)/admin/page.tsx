@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Button from "@/components/Button";
 import GcLibrarySection from "./GcLibrarySection";
+import BillingFormsSection from "./BillingFormsSection";
 
 type Membership = {
   role: string;
@@ -316,6 +317,8 @@ export default function AdminPage() {
       {editError && <p className="text-sm text-red-600">{editError}</p>}
 
       <GcLibrarySection organizations={organizations} />
+
+      <BillingFormsSection organizations={organizations} />
     </div>
   );
 }
