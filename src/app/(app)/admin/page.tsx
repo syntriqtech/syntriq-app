@@ -21,6 +21,8 @@ type AdminUser = {
   memberships: Membership[];
 };
 
+const PLAN_OPTIONS = ["basic", "pro"];
+
 const STATUS_OPTIONS = [
   "trialing",
   "active",
@@ -68,6 +70,7 @@ export default function AdminPage() {
   const [forbidden, setForbidden] = useState(false);
 
   const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
+  const [editPlan, setEditPlan] = useState("basic");
   const [editStatus, setEditStatus] = useState("trialing");
   const [editDate, setEditDate] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -98,6 +101,7 @@ export default function AdminPage() {
 
   function startEdit(membership: Membership) {
     setEditingOrgId(membership.organizationId);
+    setEditPlan(membership.plan ?? "basic");
     setEditStatus(membership.subscriptionStatus ?? "trialing");
     setEditDate(toDateInputValue(membership.currentPeriodEnd));
     setEditError(null);
@@ -117,6 +121,7 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           organizationId,
+          plan: editPlan,
           subscriptionStatus: editStatus,
           currentPeriodEnd: editDate ? new Date(`${editDate}T23:59:59Z`).toISOString() : null,
         }),
@@ -200,7 +205,23 @@ export default function AdminPage() {
                         <td className="px-5 py-3.5 font-medium text-navy">{u.email}</td>
                         <td className="px-5 py-3.5 text-gray-600">{m.organizationName}</td>
                         <td className="px-5 py-3.5 text-gray-600 capitalize">{m.role.replace("_", " ")}</td>
-                        <td className="px-5 py-3.5 text-gray-600 capitalize">{m.plan ?? "—"}</td>
+                        <td className="px-5 py-3.5">
+                          {isEditing ? (
+                            <select
+                              value={editPlan}
+                              onChange={(e) => setEditPlan(e.target.value)}
+                              className="rounded-lg border border-gray-200 px-2 py-1 text-xs text-navy capitalize focus:border-teal focus:outline-none"
+                            >
+                              {PLAN_OPTIONS.map((p) => (
+                                <option key={p} value={p}>
+                                  {p}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="capitalize text-gray-600">{m.plan ?? "—"}</span>
+                          )}
+                        </td>
                         <td className="px-5 py-3.5">
                           {isEditing ? (
                             <select
@@ -265,7 +286,7 @@ export default function AdminPage() {
                               onClick={() => startEdit(m)}
                               className="text-xs font-semibold text-teal hover:underline"
                             >
-                              Edit trial
+                              Edit
                             </button>
                           )}
                         </td>
