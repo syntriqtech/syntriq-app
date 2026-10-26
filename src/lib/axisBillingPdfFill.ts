@@ -68,7 +68,15 @@ export async function fillAxisBillingPdf(templateBuffer: ArrayBuffer, data: Axis
   const totals = computeAxisBillingTotals(data);
 
   function setText(name: string, value: string) {
-    form.getTextField(name).setText(value);
+    const field = form.getTextField(name);
+    // Axis's fields ship with a fixed (non-auto) font size, so a long value
+    // — a full street address, a long job name — just gets clipped at the
+    // field's edge instead of wrapping or shrinking. 0 is pdf-lib/PDF's
+    // convention for "auto-size": it shrinks the text to fit the field's
+    // existing width instead, the same auto-fit behavior the COBE fill
+    // (billingPdfFill.ts) computes by hand for the same reason.
+    field.setFontSize(0);
+    field.setText(value);
   }
 
   setText("application_no", data.applicationNumber);
