@@ -330,7 +330,12 @@ export async function fillBillingPdf(templateBuffer: ArrayBuffer, mapping: Billi
   matchRectHeight(doc, page, f.baseContractedAmount, f.baseRequestedPayment);
   setCurrencyText(doc, page, f.baseContractedAmount, currency(data.job.contractValue));
   setCurrencyText(doc, page, f.baseRequestedPayment, currency(data.baseThisPeriod));
-  setText(doc, page, font, f.baseLabel, "Base");
+  // Base's row is taller than the Change Order rows (see matchRectHeight's
+  // comment above), so it auto-fits one point larger than them at the same
+  // +1 bump — -1 here brings it down to match their rendered size exactly
+  // (9pt both, as of this writing) rather than looking bigger for no
+  // visible reason.
+  setText(doc, page, font, f.baseLabel, "Base", -1);
 
   // First 4 change orders fill their own numbered row; anything beyond that
   // gets combined into the form's one blank catch-all row. Row labels are
