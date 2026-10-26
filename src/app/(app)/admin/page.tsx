@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Button from "@/components/Button";
+import GcLibrarySection from "./GcLibrarySection";
 
 type Membership = {
   role: string;
@@ -98,6 +99,19 @@ export default function AdminPage() {
   }
 
   useEffect(load, []);
+
+  // Deduped org list for the GC Library's "enable for accounts" picker —
+  // built from the memberships already fetched above rather than a second
+  // API call.
+  const organizations = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const u of users) {
+      for (const m of u.memberships) {
+        map.set(m.organizationId, m.organizationName);
+      }
+    }
+    return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [users]);
 
   function startEdit(membership: Membership) {
     setEditingOrgId(membership.organizationId);
@@ -300,6 +314,8 @@ export default function AdminPage() {
         </table>
       </div>
       {editError && <p className="text-sm text-red-600">{editError}</p>}
+
+      <GcLibrarySection organizations={organizations} />
     </div>
   );
 }
