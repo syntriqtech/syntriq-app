@@ -25,6 +25,8 @@ import { fetchStaleLienWaiverSummaryByJob, LienWaiver } from "@/lib/lienWaiversD
 import { STATUS_LABEL, STATUS_BADGE_STYLE } from "@/lib/payApplicationStatusUi";
 import { formatDate } from "@/lib/dateUtils";
 import DownloadPackagePromptModal from "@/components/DownloadPackagePromptModal";
+import StoredMaterialsPanel from "@/components/StoredMaterialsPanel";
+import { fetchJobStoredMaterials, JobStoredMaterials } from "@/lib/storedMaterialsDb";
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -150,6 +152,13 @@ export default function ScheduleOfValuesPage() {
   const [revisionReason, setRevisionReason] = useState("");
   const [revisionReasonError, setRevisionReasonError] = useState<string | null>(null);
 
+  // ── Stored materials (side panel) ─────────────────────────────────────────
+  const [smData, setSmData] = useState<JobStoredMaterials | null>(null);
+  const [smOpenIndex, setSmOpenIndex] = useState<number | null>(null);
+  const [smPanelKey, setSmPanelKey] = useState(0);
+  const [smPanelErrors, setSmPanelErrors] = useState<string[]>([]);
+  const [smNotice, setSmNotice] = useState<string | null>(null);
+
   // Carries a specific application number from bubbles into the form effect
   const targetAppRef = useRef<string | null>(null);
 
@@ -187,6 +196,19 @@ export default function ScheduleOfValuesPage() {
   }, [view, sortedJobs, jobNumber]);
 
   const job = jobs.find((j) => j.jobNumber === jobNumber);
+
+  // Stored-materials entries for this job (all applications) — drives the cell links and the panel.
+  useEffect(() => {
+    if (view !== "form" || !job) {
+      setSmData(null);
+      return;
+    }
+    let cancelled = false;
+    fetchJobStoredMaterials(job.id)
+      .then((d) => { if (!cancelled) setSmData(d); })
+      .catch(() => { if (!cancelled) setSmData(null); }); // feature is optional — the SOV works without it
+    return () => { cancelled = true; };
+  }, [view, job?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load SOV items when job/view changes in form view ────────────────────
   useEffect(() => {
@@ -604,6 +626,31 @@ export default function ScheduleOfValuesPage() {
       }
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  function handleOpenStoredMaterials(index: number) {
+    if (!currentPayApp) {
+      setSmNotice("Save this application first, then add stored materials to it.");
+      return;
+    }
+    if (!smData) {
+      setSmNotice("Stored materials isn't available right now. Check that the stored materials migrations have been run, then reload.");
+      return;
+    }
+    setSmNotice(null);
+    setSmPanelErrors([]);
+    setSmOpenIndex(index);
+  }
+
+  async function handleStoredMaterialsSaved(problems: string[]) {
+    if (!job || smOpenIndex === null) return;
+    setSmData(await fetchJobStoredMaterials(job.id));
+    if (problems.length > 0) {
+      setSmPanelErrors(problems);
+      setSmPanelKey((k) => k + 1);
+    } else {
+      setSmOpenIndex(null);
     }
   }
 
@@ -1186,6 +1233,13 @@ export default function ScheduleOfValuesPage() {
         </div>
       )}
 
+      {smNotice && (
+        <div className="flex items-start justify-between gap-3 rounded-lg bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+          <span>{smNotice}</span>
+          <button type="button" onClick={() => setSmNotice(null)} className="text-amber-600 hover:text-amber-800" aria-label="Dismiss">×</button>
+        </div>
+      )}
+
       <SOVTable
         title="Contract line items"
         itemLabel="Item"
@@ -1195,6 +1249,15 @@ export default function ScheduleOfValuesPage() {
         onUpdateItem={updateLineItem}
         lockDefinition={contractLocked}
         readOnly={isLocked}
+        onOpenStoredMaterials={handleOpenStoredMaterials}
+        storedMaterialsInfo={(index) => {
+          const line = lineItems[index];
+          if (!line || !smData) return undefined;
+          const entryIds = smData.entries
+            .filter((e) => e.sovItem === line.item && e.sovKind === "line" && e.applicationNumber === applicationNumber)
+            .map((e) => e.id);
+          return { hasDocuments: smData.documents.some((d) => d.entryId !== null && entryIds.includes(d.entryId)) };
+        }}
         addButtonLabel={contractLocked || isLocked ? undefined : "+ Add line item"}
         onAddItem={contractLocked || isLocked ? undefined : addLineItem}
       />
@@ -1209,6 +1272,22 @@ export default function ScheduleOfValuesPage() {
         onUpdateItem={updateChangeOrder}
         lockDefinition
       />
+
+      {smOpenIndex !== null && job && currentPayApp && smData && lineItems[smOpenIndex] && (
+        <StoredMaterialsPanel
+          key={`${smOpenIndex}-${smPanelKey}`}
+          jobId={job.id}
+          payApplicationId={currentPayApp.id}
+          applicationNumber={applicationNumber}
+          periodTo={periodTo}
+          line={{ item: lineItems[smOpenIndex].item, kind: "line", description: lineItems[smOpenIndex].description, amount: lineItems[smOpenIndex].storedMaterials }}
+          data={smData}
+          readOnly={isLocked}
+          initialErrors={smPanelErrors}
+          onClose={() => setSmOpenIndex(null)}
+          onSaved={handleStoredMaterialsSaved}
+        />
+      )}
 
       {showDownloadPrompt && (
         <DownloadPackagePromptModal

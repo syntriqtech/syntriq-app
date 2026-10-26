@@ -20,6 +20,7 @@ import TextField from "@/components/TextField";
 import Button from "@/components/Button";
 import G702Preview from "@/components/G702Preview";
 import G703Preview from "@/components/G703Preview";
+import StoredMaterialsSummary from "@/components/StoredMaterialsSummary";
 import { getContractorInfo } from "@/lib/sampleUser";
 import type { PayApplication } from "@/lib/payApplicationsDb";
 import { formatDate } from "@/lib/dateUtils";
@@ -537,6 +538,8 @@ export default function PayApplicationDetailPage() {
               </div>
             </dl>
           </div>
+
+          {payApp && <StoredMaterialsSummary jobId={payApp.jobId} payApplicationId={payApp.id} />}
 
           {/* Billing Package Preview */}
           <div className="border-t border-gray-200 pt-6">

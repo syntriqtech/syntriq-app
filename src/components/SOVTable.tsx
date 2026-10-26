@@ -114,6 +114,8 @@ export default function SOVTable({
   onAddItem,
   lockDefinition,
   readOnly,
+  onOpenStoredMaterials,
+  storedMaterialsInfo,
 }: {
   title: string;
   itemLabel: string;
@@ -125,6 +127,10 @@ export default function SOVTable({
   onAddItem?: () => void;
   lockDefinition?: boolean;
   readOnly?: boolean;
+  /** When provided, each row's Stored Materials cell gets an "add / view entries" link that calls this. */
+  onOpenStoredMaterials?: (index: number) => void;
+  /** Whether this row already has stored-materials files attached, for the link text. */
+  storedMaterialsInfo?: (index: number) => { hasDocuments: boolean } | undefined;
 }) {
   const rows = items.map((line) => {
     const totalCompleted =
@@ -313,6 +319,17 @@ export default function SOVTable({
                       }
                       isOver={row.isOver}
                     />
+                  )}
+                  {onOpenStoredMaterials && (
+                    <div className="mt-1 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => onOpenStoredMaterials(index)}
+                        className="text-xs font-medium text-teal hover:underline"
+                      >
+                        {storedMaterialsInfo?.(index)?.hasDocuments ? "📦 Documents attached" : "+ Add stored materials"}
+                      </button>
+                    </div>
                   )}
                 </td>
 

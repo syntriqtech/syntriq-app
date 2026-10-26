@@ -7,6 +7,8 @@ export type BillingPackageData = {
   payApp: PayAppPdfData;
   invoiceCover: InvoiceCoverData;
   lienWaivers: { kind: LienWaiverKind; data: LienWaiverData }[];
+  /** Already-built stored-materials sections (COI, bill of sale, ...) in the order they should appear — added right after the G703. */
+  storedMaterialSections?: Uint8Array[];
 };
 
 // Exported so other package assemblers (e.g. the retention release invoice
@@ -42,6 +44,7 @@ export async function buildMergedPackageBytes(data: BillingPackageData) {
     docBytes(buildInvoiceCoverDoc(data.invoiceCover)),
     docBytes(buildPayApplicationDoc(data.payApp, "g702")),
     docBytes(buildPayApplicationDoc(data.payApp, "sov")),
+    ...(data.storedMaterialSections ?? []).map((bytes) => bytes.slice().buffer as ArrayBuffer),
     ...data.lienWaivers.map((waiver) => docBytes(buildLienWaiverDoc(waiver.data, waiver.kind))),
   ];
   return mergePdfSources(sourceBytes);

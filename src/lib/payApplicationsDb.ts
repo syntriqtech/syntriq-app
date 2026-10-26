@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getCurrentUserContext } from "@/lib/currentUserContext";
 import { logActivity } from "@/lib/activityLogDb";
 import { autoMarkBillingThisMonthIfCurrent } from "@/lib/billingCheckinDb";
+import { copyStoredMaterialsToRevision, softDeleteStoredMaterialsForPayApp } from "@/lib/storedMaterialsDb";
 
 export type PayApplicationStatus = "draft" | "submitted" | "revised" | "certified" | "paid";
 
@@ -197,6 +198,7 @@ export async function softDeletePayApplication(id: string): Promise<void> {
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(error.message);
+  await softDeleteStoredMaterialsForPayApp(id);
 }
 
 export async function updatePayApplicationAmount(
@@ -259,6 +261,7 @@ export async function createPayApplicationRevision(
   });
   if (error) throw new Error(error.message);
   const result = rowToPayApplication(data);
+  await copyStoredMaterialsToRevision(payAppId, result.id);
   // A revision is a resubmission — always represents active billing on
   // this job, unlike the plain amount-edit path which only counts once it
   // actually promotes past draft.

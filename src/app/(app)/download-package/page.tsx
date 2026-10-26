@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useJobs } from "@/hooks/useJobs";
 import { SOVLineItem } from "@/lib/sovData";
 import { fetchApplicationOptions, fetchSovItems, SovApplicationOption } from "@/lib/sovLineItemsDb";
@@ -23,6 +23,9 @@ import { fetchGeneralContractors, GeneralContractor } from "@/lib/generalContrac
 import TextField from "@/components/TextField";
 import Button from "@/components/Button";
 import AdoptSignatureModal from "@/components/AdoptSignatureModal";
+import { fetchJobStoredMaterials } from "@/lib/storedMaterialsDb";
+import { buildStoredMaterialSections, PackageSection, StoredMaterialsItem } from "@/lib/storedMaterialsPdf";
+import { coiStatusWarning, DEFAULT_SECTION_ORDER, missingDocumentWarnings, PackageSectionKey, StoredMaterialDocument } from "@/lib/storedMaterialsMath";
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
@@ -63,6 +66,16 @@ export default function DownloadPackagePage() {
   const [lineItems, setLineItems] = useState<SOVLineItem[]>([]);
   const [changeOrders, setChangeOrders] = useState<SOVLineItem[]>([]);
   const [contractor, setContractor] = useState({ company: sampleUser.company, companyAddress: sampleUser.companyAddress });
+
+  // Stored materials (supabase/068): extra sections appended after the G703 when
+  // this application has entries. Order is for this download only.
+  const [smItems, setSmItems] = useState<StoredMaterialsItem[]>([]);
+  const [smCoi, setSmCoi] = useState<StoredMaterialDocument | null>(null);
+  const [smSections, setSmSections] = useState<PackageSection[]>([]);
+  const [smOrder, setSmOrder] = useState<PackageSectionKey[]>([]);
+  const [smProblems, setSmProblems] = useState<string[]>([]);
+  const [smLoading, setSmLoading] = useState(false);
+  const dragKeyRef = useRef<PackageSectionKey | null>(null);
 
   // Carries a specific job/application handed off from another page (e.g. SOV "save" prompt)
   const initialJobRef = useRef<string | null>(null);
@@ -190,6 +203,80 @@ export default function DownloadPackagePage() {
       cancelled = true;
     };
   }, [job?.id, applicationNumber]);
+
+  useEffect(() => {
+    if (!job) {
+      setSmItems([]);
+      setSmCoi(null);
+      setSmSections([]);
+      setSmOrder([]);
+      setSmProblems([]);
+      return;
+    }
+    let cancelled = false;
+    setSmLoading(true);
+    (async () => {
+      try {
+        const data = await fetchJobStoredMaterials(job.id);
+        // This application's own records (one per SOV line that has files attached) and their documents.
+        const items: StoredMaterialsItem[] = data.entries
+          .filter((e) => e.applicationNumber === applicationNumber && !e.originEntryId)
+          .map((entry) => ({ entry, docs: data.documents.filter((d) => d.entryId === entry.id) }));
+        if (cancelled) return;
+        const built = items.length > 0 ? await buildStoredMaterialSections(items, data.coi) : { sections: [], problems: [] };
+        if (cancelled) return;
+        setSmItems(items);
+        setSmCoi(data.coi);
+        setSmSections(built.sections);
+        setSmOrder(DEFAULT_SECTION_ORDER.filter((k) => built.sections.some((sec) => sec.key === k)));
+        setSmProblems(built.problems);
+      } catch {
+        // Stored materials is optional — if it can't load, the normal package is unaffected.
+        if (!cancelled) {
+          setSmItems([]);
+          setSmCoi(null);
+          setSmSections([]);
+          setSmOrder([]);
+          setSmProblems([]);
+        }
+      } finally {
+        if (!cancelled) setSmLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [job?.id, applicationNumber]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Lines billing stored materials with nothing attached at all — still just a warning.
+  const billedWithoutFiles = lineItems.filter(
+    (l) => l.storedMaterials > 0 && !smItems.some((i) => i.entry.sovItem === l.item && i.docs.length > 0)
+  );
+  const smWarnings = useMemo(() => {
+    const warnings = smItems.length > 0 ? missingDocumentWarnings(smItems, smCoi, periodTo) : [];
+    for (const l of billedWithoutFiles) {
+      warnings.push({ key: `none-${l.item}`, message: `Stored materials are billed on item ${l.item} but no documents are attached` });
+    }
+    if (smItems.length === 0 && billedWithoutFiles.length > 0) {
+      const coiWarning = coiStatusWarning(smCoi, periodTo);
+      if (coiWarning) warnings.push({ key: "coi", message: coiWarning });
+    }
+    return warnings;
+  }, [smItems, smCoi, periodTo, billedWithoutFiles.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const orderedSmSections = smOrder
+    .map((key) => smSections.find((sec) => sec.key === key))
+    .filter((sec): sec is PackageSection => Boolean(sec));
+
+  function moveSection(key: PackageSectionKey, toIndex: number) {
+    setSmOrder((prev) => {
+      const from = prev.indexOf(key);
+      if (from < 0 || toIndex < 0 || toIndex >= prev.length) return prev;
+      const next = [...prev];
+      next.splice(from, 1);
+      next.splice(toIndex, 0, key);
+      return next;
+    });
+  }
 
   async function handleSelectApplication(number: string) {
     if (!job || number === applicationNumber) return;
@@ -411,6 +498,7 @@ export default function DownloadPackagePage() {
           gcProjectNumber: job.architectProjectNumber ?? "",
           logo,
         },
+        storedMaterialSections: orderedSmSections.map((sec) => sec.bytes),
         lienWaivers: selectedWaivers.map((kind) => ({
           kind,
           data: {
@@ -654,6 +742,63 @@ export default function DownloadPackagePage() {
               </label>
             ))}
           </div>
+        </div>
+      )}
+      {!isCustomMode && (smItems.length > 0 || billedWithoutFiles.length > 0) && (
+        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+          <h2 className="text-sm font-semibold text-gray-500">Stored materials in this package</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Added after the G703 in this order. Drag to reorder — this only affects this download.
+          </p>
+          {smWarnings.length > 0 && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+              <p className="font-semibold">Some stored-materials items are missing. You can still download.</p>
+              <ul className="mt-1 list-disc pl-4">
+                {smWarnings.map((w) => (
+                  <li key={w.key}>{w.message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {smProblems.length > 0 && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+              <p className="font-semibold">Some files could not be read and were left out:</p>
+              <ul className="mt-1 list-disc pl-4">
+                {smProblems.map((p, i) => (
+                  <li key={i}>{p}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {orderedSmSections.length > 0 ? (
+            <ul className="mt-4 flex flex-col gap-2">
+              {orderedSmSections.map((sec, index) => (
+                <li
+                  key={sec.key}
+                  draggable
+                  onDragStart={() => { dragKeyRef.current = sec.key; }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (dragKeyRef.current) moveSection(dragKeyRef.current, index);
+                    dragKeyRef.current = null;
+                  }}
+                  className="flex cursor-grab items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm text-navy"
+                >
+                  <span className="flex items-center gap-3">
+                    <span className="text-gray-300" aria-hidden>⋮⋮</span>
+                    {sec.label}
+                  </span>
+                  <span className="flex items-center gap-3 text-xs text-gray-500">
+                    {sec.pageCount} {sec.pageCount === 1 ? "page" : "pages"}
+                    <button type="button" onClick={() => moveSection(sec.key, index - 1)} disabled={index === 0} className="text-gray-400 hover:text-navy disabled:opacity-30" aria-label={`Move ${sec.label} up`}>▲</button>
+                    <button type="button" onClick={() => moveSection(sec.key, index + 1)} disabled={index === orderedSmSections.length - 1} className="text-gray-400 hover:text-navy disabled:opacity-30" aria-label={`Move ${sec.label} down`}>▼</button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-xs text-gray-500">{smLoading ? "Loading documents…" : "No documents have been added yet, so nothing extra will be included."}</p>
+          )}
         </div>
       )}
       {needsSignature && (
