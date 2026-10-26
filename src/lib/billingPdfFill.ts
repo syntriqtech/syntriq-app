@@ -217,32 +217,36 @@ function setText(
   const widget = findWidgetByName(doc, page, name);
   if (!widget) return;
   const rectArr = widget.dict.get(PDFName.of("Rect"));
-  if (rectArr instanceof PDFArray && value) {
-    const [x0, y0, x1, y1] = rectArr.asArray().map((n) => (n as PDFNumber).asNumber());
-    const bounds = fieldTextBounds(x1 - x0, y1 - y0);
-    const { fontSize } = layoutSinglelineText(value, { alignment: TextAlignment.Left, font, bounds });
-    widget.dict.set(PDFName.of("DA"), PDFString.of(`0 g /Helvetica ${fontSize + FONT_SIZE_BUMP + extraBump} Tf`));
-  }
-  widget.dict.set(PDFName.of("V"), PDFHexString.fromText(value));
   // COBE's own fields are merged single dicts (field + widget in one
   // object, the only shape the rest of this file was written against) —
   // but a field pdf-lib itself creates (form.createTextField(), used for
   // the editable row-label fields below) comes out as a separate
-  // parent/child pair instead: a /Fields-level field dict holding /V, plus
-  // a child widget annotation that only has /Parent. Readers (and
-  // updateFieldAppearances() below) resolve a field's value and its dirty
-  // state from that parent ref, not the child widget's — /V written only
-  // on the widget, and markFieldAsDirty() called with the widget's ref,
-  // are both silently ignored for this shape. Write /V on /Parent too and
-  // mark /Parent's ref dirty instead whenever one exists; both are no-ops
-  // for the merged (no /Parent) case, so this doesn't change behavior for
-  // any of COBE's own fields.
+  // parent/child pair instead: a /Fields-level field dict holding /V and
+  // /DA, plus a child widget annotation that only has /Parent. Readers
+  // (and updateFieldAppearances() below, which operates on form.getFields()
+  // — i.e. the PARENT-level dict) resolve a field's value, its default
+  // appearance, and its dirty state from that parent, not the child
+  // widget's — writing only on the widget is silently ignored for this
+  // shape (this is what made the row labels auto-fit/bump correctly in an
+  // isolated test but still come out at the template's original default
+  // size for real: /DA was only ever landing on the widget). Write every
+  // property on /Parent too, and mark /Parent's ref dirty, whenever one
+  // exists; both are no-ops for the merged (no /Parent) case, so this
+  // doesn't change behavior for any of COBE's own fields.
   const parentRef = widget.dict.get(PDFName.of("Parent"));
+  const parent = parentRef instanceof PDFRef ? doc.context.lookup(parentRef, PDFDict) : null;
   const fieldRef = parentRef instanceof PDFRef ? parentRef : widget.ref;
-  if (parentRef instanceof PDFRef) {
-    const parent = doc.context.lookup(parentRef, PDFDict);
-    parent.set(PDFName.of("V"), PDFHexString.fromText(value));
+
+  if (rectArr instanceof PDFArray && value) {
+    const [x0, y0, x1, y1] = rectArr.asArray().map((n) => (n as PDFNumber).asNumber());
+    const bounds = fieldTextBounds(x1 - x0, y1 - y0);
+    const { fontSize } = layoutSinglelineText(value, { alignment: TextAlignment.Left, font, bounds });
+    const da = PDFString.of(`0 g /Helvetica ${fontSize + FONT_SIZE_BUMP + extraBump} Tf`);
+    widget.dict.set(PDFName.of("DA"), da);
+    parent?.set(PDFName.of("DA"), da);
   }
+  widget.dict.set(PDFName.of("V"), PDFHexString.fromText(value));
+  parent?.set(PDFName.of("V"), PDFHexString.fromText(value));
   doc.getForm().markFieldAsDirty(fieldRef);
 }
 
