@@ -64,9 +64,16 @@ const RENAME_ON_FINAL = [
 // y-bounds) — x1 stops a couple points short of the Contracted Amount
 // column (x≈280–282) so the field never crosses that column's grid line.
 // Progress and Final share the same x-range (COBE copy-pasted the page) but
-// differ in y since Final drops the Subtotal/Retention rows above.
+// differ in y since Final drops the Subtotal/Retention rows above. Base's
+// y-bounds are deliberately the Base Requested Payment field's own Rect
+// (the "$389,270.00" field), not the row's actual (taller) money-column
+// box — COBE drew the Base Contracted Amount box ~2.5pt taller than every
+// other row's (see matchRectHeight below, which corrects that box down to
+// the same bounds at fill time); reusing them here keeps Base's label the
+// same height as every Change Order label instead of inheriting that
+// quirk and overflowing into the row/border above.
 const PROGRESS_LABEL_ROWS = [
-  { suffix: "Base", text: "Base", rect: [197, 549, 278, 563] },
+  { suffix: "Base", text: "Base", rect: [197, 550.9911, 278, 562.5967] },
   { suffix: "CO1", text: "Change Order #1", rect: [197, 535.9039, 278, 547.5095] },
   { suffix: "CO2", text: "Change Order #2", rect: [197, 520.8167, 278, 532.4222] },
   { suffix: "CO3", text: "Change Order #3", rect: [197, 506.1163, 278, 517.7219] },
@@ -75,7 +82,7 @@ const PROGRESS_LABEL_ROWS = [
 ];
 
 const FINAL_LABEL_ROWS = [
-  { suffix: "Base", text: "Base", rect: [197, 541, 278, 555] },
+  { suffix: "Base", text: "Base", rect: [197, 543.641, 278, 555.2466] },
   { suffix: "CO1", text: "Change Order #1", rect: [197, 528.5537, 278, 540.1593] },
   { suffix: "CO2", text: "Change Order #2", rect: [197, 513.4665, 278, 525.0721] },
   { suffix: "CO3", text: "Change Order #3", rect: [197, 498.3793, 278, 509.9848] },
@@ -236,7 +243,7 @@ async function main() {
   // cache for everyone (observed stale downloads served well after a
   // fresh upload, on a delay that varies by edge location) — a brand new
   // path has nothing to be stale.
-  const filePath = `${organizationId}/cobe-billing-form-v4.pdf`;
+  const filePath = `${organizationId}/cobe-billing-form-v5.pdf`;
 
   const { error: uploadError } = await supabase.storage
     .from("billing-form-templates")

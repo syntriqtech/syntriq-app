@@ -330,12 +330,11 @@ export async function fillBillingPdf(templateBuffer: ArrayBuffer, mapping: Billi
   matchRectHeight(doc, page, f.baseContractedAmount, f.baseRequestedPayment);
   setCurrencyText(doc, page, f.baseContractedAmount, currency(data.job.contractValue));
   setCurrencyText(doc, page, f.baseRequestedPayment, currency(data.baseThisPeriod));
-  // Base's row is taller than the Change Order rows (see matchRectHeight's
-  // comment above), so it auto-fits one point larger than them at the same
-  // +1 bump — -1 here brings it down to match their rendered size exactly
-  // (9pt both, as of this writing) rather than looking bigger for no
-  // visible reason.
-  setText(doc, page, font, f.baseLabel, "Base", -1);
+  // Base Label's box (setup-cobe-billing-template.mjs) is now the same
+  // height as the Change Order labels' boxes, so they share the same
+  // auto-fit baseline — same +2 bump as those keeps them rendering at the
+  // same size (9pt, as of this writing).
+  setText(doc, page, font, f.baseLabel, "Base", 2);
 
   // First 4 change orders fill their own numbered row; anything beyond that
   // gets combined into the form's one blank catch-all row. Row labels are
