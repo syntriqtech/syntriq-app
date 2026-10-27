@@ -16,7 +16,7 @@ function fmt(value: number) {
 function fmtDate(value: string | null) {
   if (!value) return "—";
   const d = new Date(`${value}T00:00:00`);
-  return isNaN(d.getTime()) ? value : d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  return isNaN(d.getTime()) ? value : d.toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" });
 }
 
 function text(doc: jsPDF, str: string, x: number, y: number, opts?: { bold?: boolean; size?: number; color?: string; align?: "left" | "center" | "right" }) {
