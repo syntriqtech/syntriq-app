@@ -360,7 +360,7 @@ export default function DownloadPackagePage() {
           contactEmail: profile?.contactEmail ?? "",
           contactPhone: profile?.contactPhone ?? "",
         },
-        payApp: { applicationNumber, applicationDate, periodTo },
+        payApp: { applicationNumber, invoiceNumber: `${job.jobNumber}-${applicationNumber}`, applicationDate, periodTo },
         contractLines: lineItems,
         changeOrders,
       }

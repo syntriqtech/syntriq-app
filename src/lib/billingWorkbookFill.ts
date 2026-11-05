@@ -8,10 +8,12 @@ export type BillingWorkbookMapping = {
   fields: Record<string, Record<string, string>>; // sheet name -> cell ref -> dotted data key
   lineItemBlocks: {
     sheet: string;
-    source: "contractLines" | "changeOrders";
+    // "contractAndChangeOrders" is for single-list forms (e.g. Cahill's) that
+    // put change orders right after the contract lines in the same table.
+    source: "contractLines" | "changeOrders" | "contractAndChangeOrders";
     startRow: number;
     endRow: number;
-    columns: Record<string, string>; // "item" | "description" | "scheduledValue" | "previousApplications" | "storedMaterials" | "percentComplete" | "paidRetention" -> column letter
+    columns: Record<string, string>; // "item" | "description" | "scheduledValue" | "previousApplications" | "currentApplication" | "storedMaterials" | "percentComplete" | "paidRetention" -> column letter
   }[];
 };
 
@@ -48,6 +50,7 @@ export type BillingWorkbookData = {
   };
   payApp: {
     applicationNumber: string;
+    invoiceNumber: string; // "{jobNumber}-{applicationNumber}", same as the COBE form's Invoice #
     applicationDate: string; // ISO yyyy-mm-dd
     periodTo: string; // ISO yyyy-mm-dd
   };
@@ -79,10 +82,17 @@ function parseIsoDate(iso: string): Date | null {
   if (!iso) return null;
   const [y, m, d] = iso.split("-").map(Number);
   if (!y || !m || !d) return null;
-  return new Date(y, m - 1, d);
+  // UTC midnight, because exceljs converts Dates to Excel's date serial in UTC —
+  // a local-midnight Date would land on the wrong day for any timezone east of UTC.
+  return new Date(Date.UTC(y, m - 1, d));
 }
 
 function resolveCellValue(data: BillingWorkbookData, key: string): string | number | Date | null {
+  // A key containing {braces} is a text template, e.g. "PROJECT NAME: {job.name}"
+  // — for cells where the form prints a label and the value in one cell.
+  if (key.includes("{")) {
+    return key.replace(/\{([^}]+)\}/g, (_, path: string) => String(resolvePath(data, path) ?? ""));
+  }
   const raw = resolvePath(data, key);
   if (DATE_KEYS.has(key)) return parseIsoDate(String(raw ?? ""));
   if (raw == null) return null;
@@ -110,6 +120,10 @@ function lineColumnValue(line: SOVLineItem, field: string): string | number {
       return line.scheduledValue;
     case "previousApplications":
       return line.previousApplications;
+    case "currentApplication":
+      // For forms with no separate Stored Materials column: what's billed
+      // this invoice is this period's work plus any stored materials.
+      return line.thisPeriod + line.storedMaterials;
     case "storedMaterials":
       return line.storedMaterials;
     case "percentComplete":
@@ -148,11 +162,11 @@ export async function fillBillingWorkbook(
   for (const block of mapping.lineItemBlocks) {
     const sheet = workbook.getWorksheet(block.sheet);
     if (!sheet) throw new Error(`Template is missing expected sheet "${block.sheet}".`);
-    const lines = data[block.source];
+    const lines = block.source === "contractAndChangeOrders" ? [...data.contractLines, ...data.changeOrders] : data[block.source];
     const capacity = block.endRow - block.startRow + 1;
     if (lines.length > capacity) {
       throw new Error(
-        `${block.source === "contractLines" ? "Contract" : "Change order"} line items (${lines.length}) don't fit ` +
+        `${block.source === "contractLines" ? "Contract" : block.source === "changeOrders" ? "Change order" : "Contract and change order"} line items (${lines.length}) don't fit ` +
           `the template's ${capacity} available rows (${block.sheet} rows ${block.startRow}-${block.endRow}). ` +
           `Combine lines or extend the template before generating.`
       );
@@ -164,6 +178,10 @@ export async function fillBillingWorkbook(
       }
     });
   }
+
+  // Tell Excel to recompute every formula when the file opens, so the
+  // template's own totals never show stale numbers from before the fill.
+  workbook.calcProperties.fullCalcOnLoad = true;
 
   const output = await workbook.xlsx.writeBuffer();
   return output as unknown as ArrayBuffer;
