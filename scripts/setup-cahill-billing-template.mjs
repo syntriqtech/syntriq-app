@@ -94,6 +94,15 @@ async function buildCleanTemplate() {
   sheet.getCell("H37").value = { formula: "H36*F37", result: 0 };
   sheet.getCell("H38").value = { formula: "H36-H37", result: 0 };
 
+  // The logo (a 200x107 image) is drawn in a much wider box in Cahill's file, so
+  // it looks stretched sideways. Keep its height (rows 1-6) and set the width
+  // to the image's real proportions.
+  const logoHeightPx = 135;
+  const logoRange = sheet.getImages()[0].range;
+  logoRange.br = undefined; // no bottom-right corner -> sized by ext below
+  logoRange.ext = { width: Math.round((logoHeightPx * 200) / 107), height: logoHeightPx };
+  logoRange.editAs = "oneCell";
+
   workbook.calcProperties.fullCalcOnLoad = true;
   await workbook.xlsx.writeFile(CLEAN_XLSX);
   console.log("Wrote", CLEAN_XLSX);
@@ -103,9 +112,9 @@ async function provision() {
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
   const bytes = fs.readFileSync(CLEAN_XLSX);
 
-  // Versioned filename (bump -v2 if the file ever changes) — re-uploading to a
+  // Versioned filename (bump -v3 if the file ever changes) — re-uploading to a
   // fixed path doesn't reliably bust edge caching; same reasoning as COBE/Axis.
-  const filePath = `${organizationId}/cahill-billing-form-v2.xlsx`;
+  const filePath = `${organizationId}/cahill-billing-form-v3.xlsx`;
   const { error: uploadError } = await supabase.storage
     .from("billing-form-templates")
     .upload(filePath, bytes, {
