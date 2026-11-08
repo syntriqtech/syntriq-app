@@ -19,6 +19,7 @@ import { BillingWorkbookMapping, fillBillingWorkbook } from "@/lib/billingWorkbo
 import { BillingPdfMapping, fillBillingPdf } from "@/lib/billingPdfFill";
 import { AxisBillingPdfData, fillAxisBillingPdf } from "@/lib/axisBillingPdfFill";
 import { downloadPdfBlob } from "@/lib/billingPackagePdf";
+import { renderWorkbookSheetsToPdf } from "@/lib/workbookPdfRender";
 import { fetchGeneralContractors, GeneralContractor } from "@/lib/generalContractorsDb";
 import TextField from "@/components/TextField";
 import Button from "@/components/Button";
@@ -30,6 +31,14 @@ import { coiStatusWarning, DEFAULT_SECTION_ORDER, missingDocumentWarnings, Packa
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
+
+// Sheet names of CTI's four lien waivers inside its billing workbook.
+const CTI_WAIVER_SHEETS: Record<LienWaiverKind, string> = {
+  "conditional-progress": "CONDITIONAL PROGRESS",
+  "unconditional-progress": "UNCONDITIONAL PROGRESS",
+  "conditional-final": "CONDITIONAL FINAL",
+  "unconditional-final": "UNCONDITIONAL FINAL",
+};
 
 const WAIVER_OPTIONS: { kind: LienWaiverKind; label: string }[] = [
   { kind: "conditional-progress", label: "Conditional Waiver — Progress Payment" },
@@ -112,6 +121,10 @@ export default function DownloadPackagePage() {
   // (only page 2, not output yet, has one), so it's intentionally excluded
   // from isPdfCustomMode's signature requirement below.
   const isAxisPdfMode = (selectedTemplate?.fieldMapping as { kind?: string } | null)?.kind === "pdf-axis";
+  // "CTI Billing Form PDF" — the CTI Excel billing form (same template and
+  // cell mapping), but handed to the client as a finished PDF of its
+  // Invoice Cover, Payment Application and Schedule of Values sheets.
+  const isCtiPdfMode = (selectedTemplate?.fieldMapping as { kind?: string } | null)?.kind === "pdf-cti";
 
   useEffect(() => {
     fetchBillingFormTemplates().then(setBillingFormTemplates).catch(() => {});
@@ -360,11 +373,20 @@ export default function DownloadPackagePage() {
           contactEmail: profile?.contactEmail ?? "",
           contactPhone: profile?.contactPhone ?? "",
         },
+        signer: { title: claimantTitle },
         payApp: { applicationNumber, invoiceNumber: `${job.jobNumber}-${applicationNumber}`, applicationDate, periodTo },
         contractLines: lineItems,
         changeOrders,
       }
     );
+
+    if (isCtiPdfMode) {
+      // The workbook's own lien waiver sheets, in the usual order, for whichever the user ticked.
+      const waiverSheets = WAIVER_OPTIONS.filter((o) => selectedWaivers.includes(o.kind)).map((o) => CTI_WAIVER_SHEETS[o.kind]);
+      const pdf = await renderWorkbookSheetsToPdf(filled, ["INVOICE COVER", "PAYMENT APPLICATION", "SCEDULE OF VALUES", ...waiverSheets]);
+      downloadPdfBlob(pdf, `${job.jobNumber}-cti-billing-form-app${applicationNumber}.pdf`);
+      return;
+    }
 
     const blob = new Blob([filled], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const url = URL.createObjectURL(blob);
@@ -693,8 +715,10 @@ export default function DownloadPackagePage() {
           <h2 className="text-sm font-semibold text-gray-500">2. Custom billing form</h2>
           <p className="mt-1 text-sm text-gray-500">
             This will fill <span className="font-medium text-navy">{selectedTemplate?.name}</span>{" "}
-            ({selectedTemplate?.fileName}) with this job&apos;s data instead of the default PDF package. Lien
-            waivers and signatures aren&apos;t part of this yet.
+            ({selectedTemplate?.fileName}) with this job&apos;s data instead of the default PDF package
+            {isCtiPdfMode
+              ? " and gives you the result as a PDF. Pick any lien waivers to add below. Signatures aren't added."
+              : ". Lien waivers and signatures aren't part of this yet."}
           </p>
         </div>
       )}
@@ -725,10 +749,14 @@ export default function DownloadPackagePage() {
           </p>
         </div>
       )}
-      {!isCustomMode && (
+      {(!isCustomMode || isCtiPdfMode) && (
         <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-          <h2 className="text-sm font-semibold text-gray-500">2. Documents to include</h2>
-          <p className="mt-1 text-sm text-gray-500">The pay application packet (G702 + SOV) and invoice cover are always included. Choose which lien waiver(s) to add.</p>
+          <h2 className="text-sm font-semibold text-gray-500">{isCtiPdfMode ? "3. Lien waivers" : "2. Documents to include"}</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            {isCtiPdfMode
+              ? "The invoice cover, payment application and schedule of values are always included. Choose which lien waiver(s) to add — none is fine too."
+              : "The pay application packet (G702 + SOV) and invoice cover are always included. Choose which lien waiver(s) to add."}
+          </p>
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             {WAIVER_OPTIONS.map((option) => (
               <label key={option.kind} className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-navy">

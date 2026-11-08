@@ -48,6 +48,10 @@ export type BillingWorkbookData = {
     contactEmail: string;
     contactPhone: string;
   };
+  // The logged-in user's "Name, Role" line — for the lien waivers' Claimant's Title.
+  signer?: {
+    title: string;
+  };
   payApp: {
     applicationNumber: string;
     invoiceNumber: string; // "{jobNumber}-{applicationNumber}", same as the COBE form's Invoice #
