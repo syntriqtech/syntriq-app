@@ -125,6 +125,8 @@ export default function DownloadPackagePage() {
   // cell mapping), but handed to the client as a finished PDF of its
   // Invoice Cover, Payment Application and Schedule of Values sheets.
   const isCtiPdfMode = (selectedTemplate?.fieldMapping as { kind?: string } | null)?.kind === "pdf-cti";
+  // "Cahill Billing Form PDF" — same idea for Cahill's one-sheet Subcontractor Invoice.
+  const isCahillPdfMode = (selectedTemplate?.fieldMapping as { kind?: string } | null)?.kind === "pdf-cahill";
 
   useEffect(() => {
     fetchBillingFormTemplates().then(setBillingFormTemplates).catch(() => {});
@@ -385,6 +387,12 @@ export default function DownloadPackagePage() {
       const waiverSheets = WAIVER_OPTIONS.filter((o) => selectedWaivers.includes(o.kind)).map((o) => CTI_WAIVER_SHEETS[o.kind]);
       const pdf = await renderWorkbookSheetsToPdf(filled, ["INVOICE COVER", "PAYMENT APPLICATION", "SCEDULE OF VALUES", ...waiverSheets]);
       downloadPdfBlob(pdf, `${job.jobNumber}-cti-billing-form-app${applicationNumber}.pdf`);
+      return;
+    }
+
+    if (isCahillPdfMode) {
+      const pdf = await renderWorkbookSheetsToPdf(filled, ["Invoice"]);
+      downloadPdfBlob(pdf, `${job.jobNumber}-cahill-billing-form-app${applicationNumber}.pdf`);
       return;
     }
 
@@ -718,7 +726,9 @@ export default function DownloadPackagePage() {
             ({selectedTemplate?.fileName}) with this job&apos;s data instead of the default PDF package
             {isCtiPdfMode
               ? " and gives you the result as a PDF. Pick any lien waivers to add below. Signatures aren't added."
-              : ". Lien waivers and signatures aren't part of this yet."}
+              : isCahillPdfMode
+                ? " and gives you the result as a PDF. Lien waivers and signatures aren't part of this yet."
+                : ". Lien waivers and signatures aren't part of this yet."}
           </p>
         </div>
       )}

@@ -570,7 +570,14 @@ function drawSheet(
       let lines: string[];
 
       if (wrap) {
-        lines = doc.splitTextToSize(text, Math.max(1, boxW - pad * 2 - indent)) as string[];
+        const availW = Math.max(1, boxW - pad * 2 - indent);
+        // Never split a word across lines: shrink a little until the longest word fits.
+        const longestWord = () => Math.max(...text.split(/\s+/).map((w) => doc.getTextWidth(w)));
+        while (longestWord() > availW && size > baseSize * 0.7) {
+          size -= 0.25;
+          doc.setFontSize(size);
+        }
+        lines = doc.splitTextToSize(text, availW) as string[];
         // Long wrapped text in a fixed-height row: shrink until it fits, like a person would.
         while (lines.length * size * 1.15 > rect.h && size > baseSize * 0.55) {
           size -= 0.25;
@@ -582,7 +589,10 @@ function drawSheet(
         {
           const textW = doc.getTextWidth(text);
           let extra = 0;
-          if (textW > boxW - pad * 2 && (horizontal === "left" || horizontal === "right" || horizontal === "center")) {
+          // A cell with a border on its right edge is a box: text stays inside it (shrinking
+          // if needed) instead of spilling past the line into the next cell.
+          const boxed = !!ws.getCell(r, rect.c2).border?.right?.style;
+          if (!boxed && textW > boxW - pad * 2 && (horizontal === "left" || horizontal === "right" || horizontal === "center")) {
             let cc = rect.c2 + 1;
             while (cc <= lastCol && textW > boxW + extra - pad * 2) {
               const v = getValue(ws.name, r, cc);
