@@ -65,7 +65,7 @@ export default function OpenARWidget({
   }
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+    <div data-tour="dash-open-ar" className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between border-b border-gray-100 pb-3">
         <h2 className="text-base font-bold text-navy">Open AR due</h2>
         <Link

@@ -14,6 +14,7 @@ import YellowcardImportModal from "@/components/YellowcardImportModal";
 import ContractImportModal from "@/components/ContractImportModal";
 import GCCombobox from "@/components/GCCombobox";
 import ProUpgradeModal from "@/components/ProUpgradeModal";
+import ProBadge from "@/components/ProBadge";
 import { usePlan } from "@/hooks/usePlan";
 
 const SESSION_KEY = "yellowcard_draft";
@@ -415,6 +416,7 @@ export default function JobSetupPage() {
           <button
             type="button"
             onClick={() => setShowYellowcardModal(true)}
+            data-tour="job-import"
             disabled={isImporting}
             className="rounded-lg border border-teal px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/10 disabled:opacity-50"
           >
@@ -423,10 +425,12 @@ export default function JobSetupPage() {
           <button
             type="button"
             onClick={() => (plan === "pro" ? setShowContractModal(true) : setShowProUpgrade(true))}
+            data-tour="job-import-ai"
             disabled={isExtracting}
-            className="rounded-lg border border-teal px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/10 disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-teal px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/10 disabled:opacity-50"
           >
             {isExtracting ? "Reading contract…" : "Job Import (AI)"}
+            <ProBadge />
           </button>
         </div>
       </div>
@@ -714,7 +718,7 @@ export default function JobSetupPage() {
         {error && <p className="text-sm text-red-600 sm:col-span-2">{error}</p>}
 
         <div className="flex items-center gap-3 sm:col-span-2">
-          <Button type="submit" className="w-auto px-6" disabled={isSaving}>
+          <Button type="submit" className="w-auto px-6" disabled={isSaving} data-tour="job-save">
             {isSaving ? "Saving…" : editingJobId ? "Save changes" : "Create job"}
           </Button>
           {editingJobId && (

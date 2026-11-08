@@ -16,7 +16,7 @@ export default function OutstandingPaymentsCard({
   buckets: Bucket[];
 }) {
   return (
-    <div className="flex flex-col rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+    <div data-tour="dash-outstanding" className="flex flex-col rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
       <div className="text-sm text-gray-500">Outstanding payments</div>
       <div className="mt-1 text-2xl font-bold text-navy">{currency.format(total)}</div>
 

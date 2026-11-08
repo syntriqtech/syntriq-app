@@ -1032,6 +1032,7 @@ export default function ScheduleOfValuesPage() {
             <button
               type="button"
               onClick={handleNewPayApp}
+              data-tour="new-pay-app"
               className="flex min-h-[180px] flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-gray-200 bg-white p-5 transition-all hover:border-teal/50 hover:bg-teal/5"
             >
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal/10 text-xl font-light text-teal">

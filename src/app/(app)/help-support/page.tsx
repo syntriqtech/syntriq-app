@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import TextField from "@/components/TextField";
 import Button from "@/components/Button";
 import { getContractorInfo } from "@/lib/sampleUser";
+import { useTour } from "@/components/tour/TourProvider";
 
 const CATEGORIES = [
   "Bug report",
@@ -17,6 +18,7 @@ const INPUT_CLASS =
   "w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-navy placeholder:text-gray-400 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30";
 
 export default function HelpSupportPage() {
+  const { startPhase } = useTour();
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
@@ -201,6 +203,27 @@ export default function HelpSupportPage() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Hours</p>
                 <p className="mt-0.5 text-sm text-gray-600">Monday – Friday, 8 AM – 5 PM PT</p>
               </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-100 bg-white p-6">
+            <h2 className="mb-1 text-base font-semibold text-navy">Product tour</h2>
+            <p className="mb-4 text-sm text-gray-600">Replay the guided tour any time. It never changes your data.</p>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => startPhase(1)}
+                className="rounded-lg border border-gray-200 px-4 py-2.5 text-left text-sm font-semibold text-navy hover:bg-gray-50"
+              >
+                Replay: set up your first job
+              </button>
+              <button
+                type="button"
+                onClick={() => startPhase(2)}
+                className="rounded-lg border border-gray-200 px-4 py-2.5 text-left text-sm font-semibold text-navy hover:bg-gray-50"
+              >
+                Replay: tour the app
+              </button>
             </div>
           </div>
 

@@ -41,7 +41,7 @@ export default function MonthlyBillingChart({
   const lastIdx = billed.length - 1;
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+    <div data-tour="dash-chart" className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>

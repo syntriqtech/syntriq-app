@@ -125,7 +125,7 @@ export default function DashboardPage() {
 
       <BillingDueWidget jobs={jobs} isLoadingJobs={isLoadingJobs} />
 
-      <div>
+      <div data-tour="dash-active-jobs">
         <h2 className="mb-3 text-lg font-bold text-navy">Active jobs</h2>
         {isLoading && <p className="text-sm text-gray-500">Loading jobs…</p>}
         {!isLoading && jobMetrics.length === 0 && (

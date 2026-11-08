@@ -190,7 +190,7 @@ export default function SOVTable({
     <div className="flex flex-col gap-3">
       <h2 className="text-lg font-bold text-navy">{title}</h2>
 
-      <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
+      <div data-tour="sov-grid" className="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
         <table className="w-full min-w-[1200px] text-sm">
           <thead>
             <tr className="border-b border-gray-100 text-gray-500">

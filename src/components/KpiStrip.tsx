@@ -7,7 +7,7 @@ type KpiItem = {
 
 export default function KpiStrip({ items }: { items: KpiItem[] }) {
   return (
-    <div className="grid grid-cols-1 divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white shadow-sm sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+    <div data-tour="dash-kpi" className="grid grid-cols-1 divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white shadow-sm sm:grid-cols-4 sm:divide-x sm:divide-y-0">
       {items.map((item) => (
         <div key={item.label} className="p-5">
           <div className="text-sm text-gray-500">{item.label}</div>

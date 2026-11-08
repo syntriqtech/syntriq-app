@@ -13,7 +13,7 @@ export default function BillingCheckinTile() {
   if (pendingCount === 0) return null;
 
   return (
-    <div className="flex items-center gap-6 rounded-2xl border border-teal/30 bg-teal/5 px-6 py-4">
+    <div data-tour="dash-checkin" className="flex items-center gap-6 rounded-2xl border border-teal/30 bg-teal/5 px-6 py-4">
       <div className="h-10 w-1 flex-none rounded-full bg-teal" />
 
       <div className="flex-1 min-w-0">
