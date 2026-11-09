@@ -377,8 +377,9 @@ export default function DownloadPackagePage() {
         },
         signer: { title: claimantTitle },
         payApp: { applicationNumber, invoiceNumber: `${job.jobNumber}-${applicationNumber}`, applicationDate, periodTo },
-        contractLines: lineItems,
-        changeOrders,
+        // Skip rows only apply when the company has that setting turned on.
+        contractLines: profile?.showSovSkipRows ? lineItems : lineItems.map((l) => ({ ...l, blankRowsBefore: 0 })),
+        changeOrders: profile?.showSovSkipRows ? changeOrders : changeOrders.map((c) => ({ ...c, blankRowsBefore: 0 })),
       }
     );
 

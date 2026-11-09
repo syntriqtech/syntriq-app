@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useCompanyProfile } from "@/hooks/useCompanyProfile";
-import { saveCompanyProfile, saveCompanyLogo, removeCompanyLogo } from "@/lib/companyProfileDb";
+import { saveCompanyProfile, saveCompanyLogo, removeCompanyLogo, setShowSovSkipRows } from "@/lib/companyProfileDb";
 import { getCurrentUserContext } from "@/lib/currentUserContext";
 import { fetchOrganizationMembers } from "@/lib/organizationMembersDb";
 import {
@@ -26,6 +26,11 @@ export default function CompanyProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Schedule of Values "Skip rows" toggle — saves instantly when flipped.
+  const [skipRowsOn, setSkipRowsOn] = useState(false);
+  const [skipRowsSaving, setSkipRowsSaving] = useState(false);
+  const [skipRowsError, setSkipRowsError] = useState<string | null>(null);
 
   // Company identity data is shared across the whole org (supabase/060) —
   // only the owner can edit it, everyone else sees it locked read-only.
@@ -214,6 +219,7 @@ export default function CompanyProfilePage() {
       setContactEmail(profile.contactEmail);
       setContactPhone(profile.contactPhone || "");
       setLogoUrl(profile.logoUrl);
+      setSkipRowsOn(profile.showSovSkipRows);
     }
   }, [profile]);
 
@@ -233,9 +239,25 @@ export default function CompanyProfilePage() {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Could not save company profile.");
+      setSaveError(err instanceof Error ? err.message : "Could not save company settings.");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleToggleSkipRows() {
+    if (!isOwner || skipRowsSaving) return;
+    const next = !skipRowsOn;
+    setSkipRowsError(null);
+    setSkipRowsSaving(true);
+    setSkipRowsOn(next);
+    try {
+      await setShowSovSkipRows(next);
+    } catch (err) {
+      setSkipRowsOn(!next);
+      setSkipRowsError(err instanceof Error ? err.message : "Could not save this setting.");
+    } finally {
+      setSkipRowsSaving(false);
     }
   }
 
@@ -278,7 +300,7 @@ export default function CompanyProfilePage() {
   if (isLoading || isCheckingRole) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-2xl font-bold text-navy">Company Profile</h1>
+        <h1 className="text-2xl font-bold text-navy">Company Settings</h1>
         <p className="text-sm text-gray-500">Loading...</p>
       </div>
     );
@@ -287,7 +309,7 @@ export default function CompanyProfilePage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-navy">Company Profile</h1>
+        <h1 className="text-2xl font-bold text-navy">Company Settings</h1>
         <p className="mt-1 text-sm text-gray-500">
           Your company information is used on all generated documents (pay applications, lien waivers, etc.).
         </p>
@@ -387,12 +409,12 @@ export default function CompanyProfilePage() {
         </div>
 
         {saveError && <p className="mt-3 text-sm text-red-600">{saveError}</p>}
-        {saveSuccess && <p className="mt-3 text-sm text-green-600">Company profile saved successfully.</p>}
+        {saveSuccess && <p className="mt-3 text-sm text-green-600">Company settings saved successfully.</p>}
 
         {isOwner && (
           <div className="mt-6">
             <Button type="submit" disabled={isSaving} className="w-auto px-6">
-              {isSaving ? "Saving…" : "Save Company Profile"}
+              {isSaving ? "Saving…" : "Save Company Settings"}
             </Button>
           </div>
         )}
@@ -437,7 +459,7 @@ export default function CompanyProfilePage() {
                 type="button"
                 onClick={() => {
                   if (!profile) {
-                    setLogoError("Save your company profile first before uploading a logo.");
+                    setLogoError("Save your company settings first before uploading a logo.");
                     return;
                   }
                   logoInputRef.current?.click();
@@ -465,6 +487,33 @@ export default function CompanyProfilePage() {
         </div>
 
         {logoError && <p className="mt-3 text-sm text-red-600">{logoError}</p>}
+      </div>
+
+      {/* Schedule of Values options */}
+      <div className="rounded-2xl border border-gray-100 bg-white p-6">
+        <h2 className="text-base font-bold text-navy">Schedule of Values</h2>
+        <div className="mt-3 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-navy">Skip rows on each line</p>
+            <p className="mt-1 text-sm text-gray-500">
+              Adds a &quot;Skip rows&quot; box to every Schedule of Values line so you can leave blank rows
+              between lines on your printed billing form (like CTI&apos;s double-spaced form). Leave this off to
+              keep the screen simple.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={skipRowsOn}
+            aria-label="Skip rows on each line"
+            disabled={!isOwner || skipRowsSaving}
+            onClick={handleToggleSkipRows}
+            className={`relative mt-0.5 h-6 w-11 flex-none rounded-full transition-colors disabled:opacity-50 ${skipRowsOn ? "bg-teal" : "bg-gray-300"}`}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${skipRowsOn ? "left-[22px]" : "left-0.5"}`} />
+          </button>
+        </div>
+        {skipRowsError && <p className="mt-3 text-sm text-red-600">{skipRowsError}</p>}
       </div>
 
       {/* Custom Billing Forms section */}

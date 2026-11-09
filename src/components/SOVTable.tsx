@@ -117,6 +117,7 @@ export default function SOVTable({
   readOnly,
   onOpenStoredMaterials,
   storedMaterialsInfo,
+  showSkipRows,
 }: {
   title: string;
   itemLabel: string;
@@ -132,6 +133,8 @@ export default function SOVTable({
   onOpenStoredMaterials?: (index: number) => void;
   /** Whether this row already has stored-materials files attached, for the link text. */
   storedMaterialsInfo?: (index: number) => { hasDocuments: boolean } | undefined;
+  /** Company setting (Company settings page): show the per-line "Skip rows" box. */
+  showSkipRows?: boolean;
 }) {
   const rows = items.map((line) => {
     const totalCompleted =
@@ -247,7 +250,7 @@ export default function SOVTable({
                 {/* Item # */}
                 <td className="px-3 py-2 font-semibold text-navy">
                   {row.item}
-                  {!readOnly && (
+                  {!readOnly && showSkipRows && (
                     <label
                       className="mt-1 flex items-center gap-1 text-[11px] font-normal text-gray-500"
                       title="Blank rows to leave above this line on printed billing forms that keep your spacing (like CTI's). 0 = none."

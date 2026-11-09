@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useJobs } from "@/hooks/useJobs";
+import { useCompanyProfile } from "@/hooks/useCompanyProfile";
 import { SOVLineItem } from "@/lib/sovData";
 import { deletePayApplicationWithItems, fetchApplicationOptions, fetchSovItems, saveSovItems, SovApplicationOption } from "@/lib/sovLineItemsDb";
 import SOVTable from "@/components/SOVTable";
@@ -107,6 +108,8 @@ function numericSort(a: string, b: string): number {
 export default function ScheduleOfValuesPage() {
   const router = useRouter();
   const { jobs, isLoading: isLoadingJobs } = useJobs();
+  const { profile: companyProfile } = useCompanyProfile();
+  const showSkipRows = companyProfile?.showSovSkipRows ?? false;
   const sortedJobs = [...jobs].sort((a, b) => {
     const na = parseFloat(a.jobNumber), nb = parseFloat(b.jobNumber);
     if (!isNaN(na) && !isNaN(nb)) return na - nb;
@@ -1321,6 +1324,7 @@ export default function ScheduleOfValuesPage() {
         cwRate={cwRate}
         smRate={smRate}
         onUpdateItem={updateLineItem}
+        showSkipRows={showSkipRows}
         lockDefinition={contractLocked}
         readOnly={isLocked}
         onOpenStoredMaterials={handleOpenStoredMaterials}
@@ -1344,6 +1348,7 @@ export default function ScheduleOfValuesPage() {
         cwRate={cwRate}
         smRate={smRate}
         onUpdateItem={updateChangeOrder}
+        showSkipRows={showSkipRows}
         lockDefinition
       />
 

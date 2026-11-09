@@ -194,7 +194,7 @@ export default function TeamUsersPage() {
         <h1 className="text-2xl font-bold text-navy">Team & Users</h1>
         <div className="rounded-2xl border border-gray-100 bg-white p-12 text-center shadow-sm">
           <p className="text-sm font-semibold text-gray-400">No organization yet</p>
-          <p className="mt-1 text-xs text-gray-400">Complete your company profile to set one up.</p>
+          <p className="mt-1 text-xs text-gray-400">Complete your company settings to set one up.</p>
         </div>
       </div>
     );

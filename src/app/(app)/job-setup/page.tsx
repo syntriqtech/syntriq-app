@@ -665,7 +665,7 @@ export default function JobSetupPage() {
         <div className="sm:col-span-2">
           <h3 className="text-sm font-semibold text-gray-500">Custom billing forms (optional)</h3>
           <p className="mt-1 text-xs text-gray-400">
-            Only needed for an org with a Custom Billing Forms template enabled — see Company Profile.
+            Only needed for an org with a Custom Billing Forms template enabled — see Company Settings.
           </p>
         </div>
         <TextField

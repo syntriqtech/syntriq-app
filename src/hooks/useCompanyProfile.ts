@@ -16,7 +16,7 @@ export function useCompanyProfile() {
         const data = await fetchCompanyProfile();
         if (!cancelled) setProfile(data);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load company profile.");
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load company settings.");
       } finally {
         if (!cancelled) setIsLoading(false);
       }

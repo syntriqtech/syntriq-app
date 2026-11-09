@@ -17,6 +17,7 @@ export type CompanyProfile = {
   contactPhone?: string;
   logoUrl?: string;
   companySetupCompleted: boolean;
+  showSovSkipRows: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -36,6 +37,7 @@ type CompanyProfileRow = {
   contact_phone?: string;
   logo_url?: string;
   company_setup_completed: boolean;
+  show_sov_skip_rows?: boolean | null;
   created_at: string;
   updated_at: string;
 };
@@ -73,6 +75,7 @@ function rowToCompanyProfile(row: CompanyProfileRow): CompanyProfile {
     contactPhone: row.contact_phone,
     logoUrl: row.logo_url ?? undefined,
     companySetupCompleted: row.company_setup_completed,
+    showSovSkipRows: row.show_sov_skip_rows ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -98,10 +101,23 @@ export async function fetchCompanyProfile(): Promise<CompanyProfile | null> {
   return data ? rowToCompanyProfile(data) : null;
 }
 
+// Company setting: show the "Skip rows" box on each Schedule of Values line.
+// Owner-only (same RLS as the rest of the company profile).
+export async function setShowSovSkipRows(value: boolean): Promise<void> {
+  const supabase = createClient();
+  const existing = await fetchCompanyProfile();
+  if (!existing) throw new Error("Save your company settings first.");
+  const { error } = await supabase
+    .from("company_profile")
+    .update({ show_sov_skip_rows: value, updated_at: new Date().toISOString() })
+    .eq("organization_id", existing.organizationId);
+  if (error) throw new Error(error.message);
+}
+
 export async function saveCompanyLogo(file: File): Promise<string> {
   const supabase = createClient();
   const existing = await fetchCompanyProfile();
-  if (!existing) throw new Error("Save your company profile before uploading a logo.");
+  if (!existing) throw new Error("Save your company settings before uploading a logo.");
   const organizationId = existing.organizationId;
 
   // Remove any previous logo (both extensions) so switching PNG↔JPG doesn't leave orphans
@@ -131,7 +147,7 @@ export async function saveCompanyLogo(file: File): Promise<string> {
 export async function removeCompanyLogo(): Promise<void> {
   const supabase = createClient();
   const existing = await fetchCompanyProfile();
-  if (!existing) throw new Error("Save your company profile before removing a logo.");
+  if (!existing) throw new Error("Save your company settings before removing a logo.");
   const organizationId = existing.organizationId;
 
   const { error: updateError } = await supabase

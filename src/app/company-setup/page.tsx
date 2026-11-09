@@ -92,7 +92,7 @@ export default function CompanySetupPage() {
       if (logoFile) {
         // Profile is already saved and complete at this point — a logo
         // upload hiccup shouldn't block getting into the app, since the
-        // logo can always be added later from Company Profile settings.
+        // logo can always be added later from Company Settings.
         await saveCompanyLogo(logoFile).catch((err) => {
           console.error("Logo upload failed:", err);
         });
@@ -103,7 +103,7 @@ export default function CompanySetupPage() {
       router.refresh();
     } catch (err) {
       setIsSubmitting(false);
-      setError(err instanceof Error ? err.message : "Could not save your company profile.");
+      setError(err instanceof Error ? err.message : "Could not save your company settings.");
     }
   }
 
@@ -138,7 +138,7 @@ export default function CompanySetupPage() {
           <div className="mt-6 flex flex-col items-center gap-4 text-center">
             <h1 className="text-xl font-semibold text-navy">Welcome to Syntriq</h1>
             <p className="text-sm text-gray-500">
-              Let&apos;s set up your company profile — this powers your pay applications and lien
+              Let&apos;s set up your company settings — this powers your pay applications and lien
               waivers.
             </p>
             <Button
