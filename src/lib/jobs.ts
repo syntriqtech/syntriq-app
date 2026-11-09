@@ -4,7 +4,10 @@ import { logActivity } from "@/lib/activityLogDb";
 import { PLAN_LIMITS, Plan } from "@/lib/planLimits";
 import { JobSetup } from "@/lib/jobSetupData";
 
-export type DbJob = JobSetup & { id: string; archivedAt: string | null };
+// openingBilledToDate: billed-to-date carried over from a prior system (see
+// supabase/071_jobs_opening_billed.sql). Display-only for now: shown as "Billed"
+// only while a job has no pay application yet. Not used by the pay app math.
+export type DbJob = JobSetup & { id: string; archivedAt: string | null; openingBilledToDate?: number | null };
 
 type JobRow = {
   id: string;
@@ -39,11 +42,13 @@ type JobRow = {
   co_retention_pct: number | null;
   co_retention_pct_previous: number | null;
   contract_retention_pct_previous: number | null;
+  opening_billed_to_date?: number | null;
 };
 
 function rowToJob(row: JobRow): DbJob {
   return {
     id: row.id,
+    openingBilledToDate: row.opening_billed_to_date == null ? null : Number(row.opening_billed_to_date),
     jobName: row.job_name ?? "",
     jobNumber: row.job_number,
     customer: row.customer,

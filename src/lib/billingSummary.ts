@@ -71,7 +71,8 @@ export async function computeJobBillingRows(
     const latest = applications[applications.length - 1];
 
     // Fetch SOV for latest application
-    let billedToDate = 0;
+    // No pay app yet -> fall back to the carried-over opening balance (imported jobs).
+    let billedToDate = job.openingBilledToDate ?? 0;
     let retentionHeld = 0;
     let netChangeOrders = 0;
 

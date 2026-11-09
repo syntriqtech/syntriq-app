@@ -666,6 +666,15 @@ export default function ScheduleOfValuesPage() {
   const netChangeOrders = changeOrders.reduce((sum, co) => sum + co.scheduledValue, 0);
   const revisedContractValue = (job?.contractValue ?? 0) + netChangeOrders;
   const totalScheduledValue = lineItems.reduce((sum, line) => sum + line.scheduledValue, 0);
+
+  // Opening-balance check (display only — never blocks Save, never feeds the pay app math).
+  // Imported jobs carry a billed-to-date total from the prior system. On Application #1, compare it to
+  // the Previous Applications the user has typed across lines + change orders so a missed or mistyped line shows up.
+  const openingBilled = job?.openingBilledToDate ?? null;
+  const showOpeningCheck = openingBilled != null && openingBilled > 0 && applicationNumber === "1" && !isLoadingItems;
+  const previousApplicationsTotal =
+    Math.round([...lineItems, ...changeOrders].reduce((sum, row) => sum + (row.previousApplications || 0), 0) * 100) / 100;
+  const openingDifference = openingBilled == null ? 0 : Math.round((previousApplicationsTotal - openingBilled) * 100) / 100;
   const exceedsContractValue = Boolean(job) && totalScheduledValue > job!.contractValue;
   // Lock contract line item description + scheduled value once any application has been saved
   const contractLocked = applicationOptions.length > 0;
@@ -1230,6 +1239,37 @@ export default function ScheduleOfValuesPage() {
             <span>Original contract value: <span className="font-semibold text-navy">{currency.format(job.contractValue)}</span></span>
             <span>Net change orders: <span className="font-semibold text-navy">{currency.format(netChangeOrders)}</span></span>
             <span>Revised contract value: <span className="font-semibold text-navy">{currency.format(revisedContractValue)}</span></span>
+          </div>
+        </div>
+      )}
+
+      {showOpeningCheck && (
+        <div
+          role="status"
+          className={`flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-xl border px-4 py-3 text-sm ${
+            openingDifference === 0
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-amber-200 bg-amber-50 text-amber-800"
+          }`}
+        >
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">
+              {openingDifference === 0
+                ? "Previous Applications match the imported balance"
+                : "Previous Applications don’t match the imported balance"}
+            </p>
+            <p className="mt-0.5 text-xs">
+              {openingDifference === 0
+                ? "The lines below add up to what was billed in your old system. Nothing to fix."
+                : `Your lines are ${currency.format(Math.abs(openingDifference))} ${openingDifference < 0 ? "short" : "over"}. Check for a missed or mistyped line before you save. You can still save if the difference is correct.`}
+            </p>
+          </div>
+          <div className="flex gap-5 tabular-nums">
+            <div className="flex flex-col"><span className="text-[11px] uppercase tracking-wide opacity-80">Imported balance</span><span className="font-semibold">{currency.format(openingBilled ?? 0)}</span></div>
+            <div className="flex flex-col"><span className="text-[11px] uppercase tracking-wide opacity-80">Your lines</span><span className="font-semibold">{currency.format(previousApplicationsTotal)}</span></div>
+            {openingDifference !== 0 && (
+              <div className="flex flex-col"><span className="text-[11px] uppercase tracking-wide opacity-80">Difference</span><span className="font-semibold">{openingDifference < 0 ? "−" : "+"}{currency.format(Math.abs(openingDifference))}</span></div>
+            )}
           </div>
         </div>
       )}

@@ -40,6 +40,9 @@ export async function computeJobMetrics(job: DbJob): Promise<JobMetrics> {
   const totals = sumLines([...computedContract, ...computedChangeOrders]);
   const netChangeOrders = changeOrders.reduce((sum, co) => sum + co.scheduledValue, 0);
   const revisedContractValue = job.contractValue + netChangeOrders;
+  // Imported jobs have a carried-over billed amount but no pay app yet. Show it until
+  // the first pay app exists; after that the pay app is the source of truth.
+  const billed = latest ? totals.totalCompleted : (job.openingBilledToDate ?? 0);
 
   return {
     id: job.id,
@@ -47,9 +50,9 @@ export async function computeJobMetrics(job: DbJob): Promise<JobMetrics> {
     jobNumber: job.jobNumber,
     customer: job.customer,
     contractValue: revisedContractValue,
-    billedToDate: totals.totalCompleted,
-    balanceToFinish: revisedContractValue - totals.totalCompleted,
-    percentComplete: revisedContractValue !== 0 ? Math.round((totals.totalCompleted / revisedContractValue) * 100) : 0,
+    billedToDate: billed,
+    balanceToFinish: revisedContractValue - billed,
+    percentComplete: revisedContractValue !== 0 ? Math.round((billed / revisedContractValue) * 100) : 0,
     retention: totals.retention,
     status: "Active",
     currentApplicationNumber: latest?.applicationNumber ?? null,
