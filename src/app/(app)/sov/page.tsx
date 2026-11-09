@@ -7,6 +7,7 @@ import { useCompanyProfile } from "@/hooks/useCompanyProfile";
 import { SOVLineItem } from "@/lib/sovData";
 import { deletePayApplicationWithItems, fetchApplicationOptions, fetchSovItems, saveSovItems, SovApplicationOption } from "@/lib/sovLineItemsDb";
 import SOVTable from "@/components/SOVTable";
+import SOVGrandTotal from "@/components/SOVGrandTotal";
 import { exportPayApplicationPdf } from "@/lib/payAppPdf";
 import { getContractorInfo } from "@/lib/sampleUser";
 import { computeAllJobMetrics, JobMetrics } from "@/lib/dashboardMetrics";
@@ -1351,6 +1352,8 @@ export default function ScheduleOfValuesPage() {
         showSkipRows={showSkipRows}
         lockDefinition
       />
+
+      <SOVGrandTotal lineItems={lineItems} changeOrders={changeOrders} cwRate={cwRate} smRate={smRate} />
 
       {smOpenIndex !== null && job && currentPayApp && smData && lineItems[smOpenIndex] && (
         <StoredMaterialsPanel

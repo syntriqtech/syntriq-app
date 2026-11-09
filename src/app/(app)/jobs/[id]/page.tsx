@@ -377,12 +377,13 @@ export default function JobDetailPage() {
           <div className="rounded-2xl border border-gray-100 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
               <h2 className="text-base font-bold text-navy">Pay Applications</h2>
-              <Link
-                href="/pay-applications"
+              <button
+                type="button"
+                onClick={handleViewSov}
                 className="text-sm font-semibold text-teal hover:underline"
               >
                 All pay apps →
-              </Link>
+              </button>
             </div>
             {isLoading ? (
               <p className="px-6 py-4 text-sm text-gray-500">Loading…</p>
