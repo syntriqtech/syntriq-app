@@ -23,6 +23,7 @@ type SOVRow = {
   previous_applications: number;
   this_period: number;
   stored_materials: number;
+  blank_rows_before: number | null;
 };
 
 export type SovApplicationOption = {
@@ -39,6 +40,7 @@ function rowToLineItem(row: SOVRow): SOVLineItem {
     previousApplications: Number(row.previous_applications),
     thisPeriod: Number(row.this_period),
     storedMaterials: Number(row.stored_materials),
+    blankRowsBefore: Number(row.blank_rows_before ?? 0),
   };
 }
 
@@ -91,7 +93,7 @@ export async function fetchSovItems(jobId: string, applicationNumber: string) {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("sov_line_items")
-    .select("kind, item, description, scheduled_value, previous_applications, this_period, stored_materials")
+    .select("kind, item, description, scheduled_value, previous_applications, this_period, stored_materials, blank_rows_before")
     .eq("job_id", jobId)
     .eq("application_number", applicationNumber)
     .order("sort_order", { ascending: true });
@@ -140,6 +142,7 @@ export async function saveSovItems(
     previous_applications: entry.previousApplications,
     this_period: entry.thisPeriod,
     stored_materials: entry.storedMaterials,
+    blank_rows_before: entry.blankRowsBefore ?? 0,
     sort_order: entry.sort_order,
   }));
 

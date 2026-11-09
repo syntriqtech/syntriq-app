@@ -168,15 +168,25 @@ export async function fillBillingWorkbook(
     if (!sheet) throw new Error(`Template is missing expected sheet "${block.sheet}".`);
     const lines = block.source === "contractAndChangeOrders" ? [...data.contractLines, ...data.changeOrders] : data[block.source];
     const capacity = block.endRow - block.startRow + 1;
-    if (lines.length > capacity) {
+    // Each line may ask to skip blank rows above it (SOV "Skip rows"), so a
+    // form like CTI's can keep its spaced-out look. Default 0 = packed.
+    const rowFor: number[] = [];
+    let nextRow = block.startRow;
+    for (const line of lines) {
+      nextRow += Math.max(0, Math.floor(line.blankRowsBefore ?? 0));
+      rowFor.push(nextRow);
+      nextRow += 1;
+    }
+    const rowsNeeded = nextRow - block.startRow;
+    if (rowsNeeded > capacity) {
       throw new Error(
-        `${block.source === "contractLines" ? "Contract" : block.source === "changeOrders" ? "Change order" : "Contract and change order"} line items (${lines.length}) don't fit ` +
+        `${block.source === "contractLines" ? "Contract" : block.source === "changeOrders" ? "Change order" : "Contract and change order"} line items (${lines.length}, with their skipped rows ${rowsNeeded} rows) don't fit ` +
           `the template's ${capacity} available rows (${block.sheet} rows ${block.startRow}-${block.endRow}). ` +
-          `Combine lines or extend the template before generating.`
+          `Skip fewer rows, combine lines, or extend the template before generating.`
       );
     }
     lines.forEach((line, i) => {
-      const row = block.startRow + i;
+      const row = rowFor[i];
       for (const [field, col] of Object.entries(block.columns)) {
         sheet.getCell(`${col}${row}`).value = lineColumnValue(line, field);
       }

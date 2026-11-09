@@ -16,7 +16,8 @@ type EditableField =
   | "previousApplications"
   | "thisPeriod"
   | "storedMaterials"
-  | "percentComplete";
+  | "percentComplete"
+  | "blankRowsBefore";
 
 // ── Shared input base ─────────────────────────────────────────────────────────
 
@@ -246,6 +247,25 @@ export default function SOVTable({
                 {/* Item # */}
                 <td className="px-3 py-2 font-semibold text-navy">
                   {row.item}
+                  {!readOnly && (
+                    <label
+                      className="mt-1 flex items-center gap-1 text-[11px] font-normal text-gray-500"
+                      title="Blank rows to leave above this line on printed billing forms that keep your spacing (like CTI's). 0 = none."
+                    >
+                      Skip
+                      <input
+                        type="number"
+                        min="0"
+                        max="10"
+                        step="1"
+                        className="w-12 rounded-md border border-gray-200 bg-white px-1 py-0.5 text-center text-xs text-navy focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"
+                        value={row.blankRowsBefore ?? 0}
+                        onChange={(e) => onUpdateItem(index, "blankRowsBefore", e.target.value)}
+                        onWheel={(e) => e.currentTarget.blur()}
+                      />
+                      rows
+                    </label>
+                  )}
                 </td>
 
                 {/* Description — locked for change orders */}
@@ -307,30 +327,31 @@ export default function SOVTable({
                   )}
                 </td>
 
-                {/* Stored Materials */}
+                {/* Stored Materials — the add/view link sits beside the field (not under it) so every input in the row stays level */}
                 <td className={readOnly ? computed : "px-3 py-2"}>
-                  {readOnly ? (
-                    currency.format(row.storedMaterials)
-                  ) : (
-                    <CurrencyInput
-                      value={row.storedMaterials}
-                      onCommit={(v) =>
-                        onUpdateItem(index, "storedMaterials", v)
-                      }
-                      isOver={row.isOver}
-                    />
-                  )}
-                  {onOpenStoredMaterials && (
-                    <div className="mt-1 flex justify-end">
+                  <div className="flex items-center justify-end gap-2">
+                    {onOpenStoredMaterials && (
                       <button
                         type="button"
                         onClick={() => onOpenStoredMaterials(index)}
-                        className="text-xs font-medium text-teal hover:underline"
+                        title={storedMaterialsInfo?.(index)?.hasDocuments ? "Stored materials documents attached — click to view" : "Add stored materials"}
+                        className="shrink-0 whitespace-nowrap text-xs font-medium text-teal hover:underline"
                       >
-                        {storedMaterialsInfo?.(index)?.hasDocuments ? "📦 Documents attached" : "+ Add stored materials"}
+                        {storedMaterialsInfo?.(index)?.hasDocuments ? "📦 Docs" : "+ Docs"}
                       </button>
-                    </div>
-                  )}
+                    )}
+                    {readOnly ? (
+                      currency.format(row.storedMaterials)
+                    ) : (
+                      <CurrencyInput
+                        value={row.storedMaterials}
+                        onCommit={(v) =>
+                          onUpdateItem(index, "storedMaterials", v)
+                        }
+                        isOver={row.isOver}
+                      />
+                    )}
+                  </div>
                 </td>
 
                 {/* Total Completed — computed */}

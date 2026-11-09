@@ -63,7 +63,7 @@ type PayAppWithStatus = PayApplication & {
   paymentStatus: "Unpaid" | "Partial" | "Paid";
 };
 
-type EditableField = "description" | "scheduledValue" | "previousApplications" | "thisPeriod" | "storedMaterials" | "percentComplete";
+type EditableField = "description" | "scheduledValue" | "previousApplications" | "thisPeriod" | "storedMaterials" | "percentComplete" | "blankRowsBefore";
 
 function applyUpdate(items: SOVLineItem[], index: number, field: EditableField, value: string): SOVLineItem[] {
   const updated = [...items];
@@ -74,6 +74,8 @@ function applyUpdate(items: SOVLineItem[], index: number, field: EditableField, 
     const totalCompleted = (item.scheduledValue * percent) / 100;
     const thisPeriod = Math.max(0, totalCompleted - item.previousApplications);
     updated[index] = { ...item, thisPeriod };
+  } else if (field === "blankRowsBefore") {
+    updated[index] = { ...item, blankRowsBefore: Math.min(10, Math.max(0, Math.floor(Number(value) || 0))) };
   } else {
     const numericFields: EditableField[] = ["scheduledValue", "previousApplications", "thisPeriod", "storedMaterials"];
     updated[index] = {
@@ -1123,9 +1125,6 @@ export default function ScheduleOfValuesPage() {
                   className="w-40 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-navy focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"
                   aria-describedby="appNumberHint"
                 />
-                <span id="appNumberHint" className="max-w-[10rem] text-xs text-gray-500">
-                  First pay app in Syntriq. Already billed before? Enter the next number.
-                </span>
               </>
             ) : (
             <select
@@ -1202,6 +1201,11 @@ export default function ScheduleOfValuesPage() {
             </button>
           )}
         </div>
+        {canEditApplicationNumber && (
+          <p id="appNumberHint" className="mt-2 text-xs text-gray-500">
+            First pay app in Syntriq. Already billed before? Enter the next number in Application #.
+          </p>
+        )}
       </div>
 
       {currentPayApp && (

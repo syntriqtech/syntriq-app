@@ -5,6 +5,8 @@ export type SOVLineItem = {
   previousApplications: number;
   thisPeriod: number;
   storedMaterials: number;
+  // Blank rows to leave above this line on a customer's printed billing form (0 = none).
+  blankRowsBefore?: number;
 };
 
 export const sovLineItems: Record<string, SOVLineItem[]> = {
