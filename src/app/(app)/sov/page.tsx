@@ -556,6 +556,11 @@ export default function ScheduleOfValuesPage() {
     }
     setRevisionReasonError(null);
 
+    if (canEditApplicationNumber && !/^[1-9]\d*$/.test(applicationNumber)) {
+      setSaveError("Enter an application number (1 or higher).");
+      return;
+    }
+
     // Date sequence validation — block save if dates go backward vs. the prior application
     const prevApp = applicationOptions
       .filter((o) => Number(o.applicationNumber) < Number(applicationNumber))
@@ -671,7 +676,14 @@ export default function ScheduleOfValuesPage() {
   // Imported jobs carry a billed-to-date total from the prior system. On Application #1, compare it to
   // the Previous Applications the user has typed across lines + change orders so a missed or mistyped line shows up.
   const openingBilled = job?.openingBilledToDate ?? null;
-  const showOpeningCheck = openingBilled != null && openingBilled > 0 && applicationNumber === "1" && !isLoadingItems;
+  // "First application in Syntriq" = no saved application has a lower number than this one.
+  // (It's #1 for a normal job, or whatever number the user typed for a job already billed elsewhere.)
+  const isFirstApplicationInSyntriq =
+    /^[1-9]\d*$/.test(applicationNumber) &&
+    !applicationOptions.some((o) => Number(o.applicationNumber) < Number(applicationNumber));
+  // Only a job with nothing saved yet can pick its starting number; after that numbers continue +1 on their own.
+  const canEditApplicationNumber = !!job && !isLoadingItems && applicationOptions.length === 0;
+  const showOpeningCheck = openingBilled != null && openingBilled > 0 && isFirstApplicationInSyntriq && !isLoadingItems;
   const previousApplicationsTotal =
     Math.round([...lineItems, ...changeOrders].reduce((sum, row) => sum + (row.previousApplications || 0), 0) * 100) / 100;
   const openingDifference = openingBilled == null ? 0 : Math.round((previousApplicationsTotal - openingBilled) * 100) / 100;
@@ -1100,6 +1112,22 @@ export default function ScheduleOfValuesPage() {
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="appNumber" className="text-sm font-medium text-navy">Application #</label>
+            {canEditApplicationNumber ? (
+              <>
+                <input
+                  id="appNumber"
+                  type="text"
+                  inputMode="numeric"
+                  value={applicationNumber}
+                  onChange={(e) => setApplicationNumber(e.target.value.replace(/\D/g, "").replace(/^0+/, ""))}
+                  className="w-40 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-navy focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/30"
+                  aria-describedby="appNumberHint"
+                />
+                <span id="appNumberHint" className="max-w-[10rem] text-xs text-gray-500">
+                  First pay app in Syntriq. Already billed before? Enter the next number.
+                </span>
+              </>
+            ) : (
             <select
               id="appNumber"
               value={applicationNumber}
@@ -1117,6 +1145,7 @@ export default function ScheduleOfValuesPage() {
                 <option value={applicationNumber}>#{applicationNumber} (new — unsaved)</option>
               )}
             </select>
+            )}
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="appDate" className="text-sm font-medium text-navy">Application date</label>
