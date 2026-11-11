@@ -12,6 +12,9 @@ import { useCompanyProfile } from "@/hooks/useCompanyProfile";
 import { getContractorInfo } from "@/lib/sampleUser";
 import { fetchUserProfile, saveUserSignature, formatSignerLine } from "@/lib/userProfileDb";
 import AdoptSignatureModal from "@/components/AdoptSignatureModal";
+import InfoTip from "@/components/InfoTip";
+import StepTutorial from "@/components/StepTutorial";
+import { RETENTION_WIZARD_TUTORIAL_STEPS } from "@/lib/retentionWizardTutorial";
 
 const fmt = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 const fmtShort = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -102,7 +105,7 @@ function RetentionGauge({
 
 function StepRail({ current }: { current: number }) {
   return (
-    <div className="hidden w-48 shrink-0 flex-col gap-1 border-r border-gray-100 p-6 sm:flex">
+    <div data-tour="wiz-rail" className="hidden w-48 shrink-0 flex-col gap-1 border-r border-gray-100 p-6 sm:flex">
       {STEP_LABELS.map((label, i) => {
         const num = i + 1;
         const done = num < current;
@@ -181,6 +184,8 @@ export default function RetentionReleaseWizard({
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
   const [savedSignature, setSavedSignature] = useState<string>("");
   const [sigModalOpen, setSigModalOpen] = useState(false);
+  // Step-by-step tutorial: which tutorial step is showing (null = closed).
+  const [tutorialStep, setTutorialStep] = useState<number | null>(null);
   const [userFullName, setUserFullName] = useState("");
 
   const [contractorName, setContractorName] = useState("");
@@ -457,7 +462,7 @@ export default function RetentionReleaseWizard({
           </p>
         </div>
 
-        <div className="overflow-x-auto rounded-xl border border-gray-100">
+        <div data-tour="wiz-lines" className="overflow-x-auto rounded-xl border border-gray-100">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-gray-100 text-xs font-semibold uppercase tracking-wide text-gray-400">
@@ -569,7 +574,7 @@ export default function RetentionReleaseWizard({
           )}
         </div>
 
-        <div className="overflow-x-auto rounded-xl border border-gray-100">
+        <div data-tour="wiz-amounts" className="overflow-x-auto rounded-xl border border-gray-100">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-gray-100 text-xs font-semibold uppercase tracking-wide text-gray-400">
@@ -652,7 +657,7 @@ export default function RetentionReleaseWizard({
         </div>
 
         {/* Job-level summary */}
-        <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4">
+        <div data-tour="wiz-summary" className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Release Summary</p>
           <div className="mb-3">
             <RetentionGauge total={totalHeldSelected} releasing={totalRelease} />
@@ -697,7 +702,7 @@ export default function RetentionReleaseWizard({
           </p>
         </div>
 
-        <div className="flex flex-col gap-2">
+        <div data-tour="wiz-waiver" className="flex flex-col gap-2">
           {WAIVER_OPTIONS.map((opt) => (
             <label
               key={opt.kind}
@@ -724,7 +729,7 @@ export default function RetentionReleaseWizard({
           ))}
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div data-tour="wiz-details" className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Invoice / billing date</label>
             <p className="mb-1 text-xs text-gray-400">When this retention release is being billed. Defaults to today.</p>
@@ -912,7 +917,7 @@ export default function RetentionReleaseWizard({
         </div>
 
         {/* Confirm gate */}
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <div data-tour="wiz-confirm" className="rounded-xl border border-amber-200 bg-amber-50 p-4">
           <p className="text-sm font-semibold text-amber-900 mb-2">On confirm, Syntriq will:</p>
           <ul className="flex flex-col gap-1 text-xs text-amber-800 list-disc pl-4">
             <li>
@@ -957,9 +962,39 @@ export default function RetentionReleaseWizard({
 
   const isDone = savedReleaseNumber !== null;
 
+  /** Moves the wizard to a page; if the tutorial is open, it follows to that page's first step. */
+  function goWizard(next: 1 | 2 | 3 | 4) {
+    setStep(next);
+    if (tutorialStep !== null) {
+      const i = RETENTION_WIZARD_TUTORIAL_STEPS.findIndex((t) => t.wizardStep === next);
+      if (i >= 0) setTutorialStep(i);
+    }
+  }
+
+  /** Moves the tutorial to a step, switching the wizard page to match. */
+  function goTutorial(n: number | null) {
+    if (n !== null) {
+      const t = RETENTION_WIZARD_TUTORIAL_STEPS[n];
+      if (t) setStep(t.wizardStep);
+    }
+    setTutorialStep(n);
+  }
+
+  // Pressing the tutorial's Next into a later wizard page only works if this page is filled in.
+  const tutorialNextOverrides: Partial<Record<number, () => void>> = {};
+  RETENTION_WIZARD_TUTORIAL_STEPS.forEach((t, i) => {
+    const nxt = RETENTION_WIZARD_TUTORIAL_STEPS[i + 1];
+    if (nxt && nxt.wizardStep > t.wizardStep) {
+      tutorialNextOverrides[i] = () => {
+        if (canGoNext) goTutorial(i + 1);
+      };
+    }
+  });
+
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={isDone ? undefined : onClose}
@@ -972,7 +1007,18 @@ export default function RetentionReleaseWizard({
         {/* Header */}
         <div className="flex shrink-0 items-start justify-between border-b border-gray-100 px-6 py-4">
           <div>
-            <h2 className="text-lg font-bold text-navy">Retention Release Wizard</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold text-navy">Retention Release Wizard</h2>
+              <InfoTip
+                title="Retention Release Wizard"
+                action={isDone ? undefined : { label: "Show me step by step", onClick: () => goTutorial(0) }}
+              >
+                <p>
+                  This form bills the retention a GC has held back. You pick the lines, enter the amounts, choose the
+                  lien waiver, then review. Nothing is saved until you press Confirm on the last page.
+                </p>
+              </InfoTip>
+            </div>
             <p className="mt-0.5 text-sm text-gray-500">
               {job.jobName || job.jobNumber} · {job.customer}
             </p>
@@ -1009,7 +1055,7 @@ export default function RetentionReleaseWizard({
           <div className="flex shrink-0 items-center justify-between border-t border-gray-100 px-6 py-4">
             <button
               type="button"
-              onClick={step > 1 ? () => setStep((s) => (s - 1) as 1 | 2 | 3 | 4) : onClose}
+              onClick={step > 1 ? () => goWizard((step - 1) as 1 | 2 | 3 | 4) : onClose}
               className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
             >
               {step === 1 ? "Cancel" : "← Back"}
@@ -1018,7 +1064,7 @@ export default function RetentionReleaseWizard({
             {step < 4 ? (
               <button
                 type="button"
-                onClick={() => setStep((s) => (s + 1) as 1 | 2 | 3 | 4)}
+                onClick={() => goWizard((step + 1) as 1 | 2 | 3 | 4)}
                 disabled={!canGoNext}
                 className="rounded-lg bg-teal px-6 py-2 text-sm font-semibold text-white hover:bg-teal/90 disabled:opacity-40"
               >
@@ -1044,5 +1090,14 @@ export default function RetentionReleaseWizard({
         onClose={() => setSigModalOpen(false)}
       />
     </div>
+    {!isDone && !sigModalOpen && (
+      <StepTutorial
+        steps={RETENTION_WIZARD_TUTORIAL_STEPS}
+        step={tutorialStep}
+        setStep={goTutorial}
+        nextOverrides={tutorialNextOverrides}
+      />
+    )}
+    </>
   );
 }

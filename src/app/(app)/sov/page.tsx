@@ -1,6 +1,8 @@
 "use client";
 
 import InfoTip from "@/components/InfoTip";
+import StepTutorial from "@/components/StepTutorial";
+import { PAY_APP_TUTORIAL_STEPS, PAY_APP_TUTORIAL_FIRST } from "@/lib/payAppTutorial";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useJobs } from "@/hooks/useJobs";
@@ -120,6 +122,17 @@ export default function ScheduleOfValuesPage() {
 
   // ── View state ────────────────────────────────────────────────────────────
   const [view, setView] = useState<"list" | "bubbles" | "form">("list");
+  const [tutorialStep, setTutorialStep] = useState<number | null>(null);
+
+  // Moving the tutorial back to a step on an earlier screen also takes the page back to that screen.
+  function goTutorial(n: number | null) {
+    if (n !== null && tutorialStep !== null && n < tutorialStep) {
+      const target = PAY_APP_TUTORIAL_STEPS[n].view;
+      if (target !== view) setView(target);
+    }
+    setTutorialStep(n);
+  }
+  const tutorialView = tutorialStep !== null ? PAY_APP_TUTORIAL_STEPS[tutorialStep]?.view : null;
 
   // ── List state ────────────────────────────────────────────────────────────
   const [metrics, setMetrics] = useState<JobMetrics[]>([]);
@@ -295,6 +308,8 @@ export default function ScheduleOfValuesPage() {
   async function handleSelectJob(jobId: string) {
     const selected = jobs.find((j) => j.id === jobId);
     if (!selected) return;
+    // Mid-tutorial, picking a job carries the tutorial on to that job's pay apps.
+    if (tutorialStep === 0) setTutorialStep(PAY_APP_TUTORIAL_FIRST.bubbles);
     const selectedMetrics = metrics.find((m) => m.id === jobId) ?? null;
     setJobNumber(selected.jobNumber);
     setBubbleJobMetrics(selectedMetrics);
@@ -353,6 +368,7 @@ export default function ScheduleOfValuesPage() {
 
   // ── Bubbles handlers ──────────────────────────────────────────────────────
   function handleOpenExistingApp(appNumber: string, revise: boolean = false) {
+    if (tutorialView === "bubbles") setTutorialStep(PAY_APP_TUTORIAL_FIRST.form);
     sessionStorage.removeItem("sov_start_next_app");
     targetAppRef.current = appNumber;
     setIsReviseMode(revise);
@@ -366,6 +382,7 @@ export default function ScheduleOfValuesPage() {
   }
 
   function handleNewPayApp() {
+    if (tutorialView === "bubbles") setTutorialStep(PAY_APP_TUTORIAL_FIRST.form);
     sessionStorage.setItem("sov_start_next_app", "1");
     setIsReviseMode(false);
     setRevisionReason("");
@@ -760,13 +777,30 @@ export default function ScheduleOfValuesPage() {
   // ══════════════════════════════════════════════════════════════════════════
   // LIST VIEW
   // ══════════════════════════════════════════════════════════════════════════
+  const tutorialOverlay =
+    tutorialStep !== null && tutorialView === view ? (
+      <StepTutorial
+        steps={PAY_APP_TUTORIAL_STEPS}
+        step={tutorialStep}
+        setStep={goTutorial}
+        nextOverrides={{
+          // Next on "Pick a job" opens the first job; Next on "Start a new pay app" opens the form.
+          0: () => {
+            if (sorted[0]) handleSelectJob(sorted[0].id);
+            else setTutorialStep(null);
+          },
+          3: () => handleNewPayApp(),
+        }}
+      />
+    ) : null;
+
   if (view === "list") {
     return (
       <div className="flex flex-col gap-6">
         <div>
           <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-navy">Create Pay App</h1>
-          <InfoTip title="Create a pay app">
+          <InfoTip title="Create a pay app" action={{ label: "Show me step by step", onClick: () => setTutorialStep(PAY_APP_TUTORIAL_FIRST.list) }}>
             <p>Pick the job you&apos;re billing this period. Search by job #, name or GC.</p>
             <p>Then you can start the next pay app, or open an earlier one.</p>
           </InfoTip>
@@ -817,6 +851,7 @@ export default function ScheduleOfValuesPage() {
           </div>
         </div>
 
+        <div data-tour="sov-job-list">
         <JobListTable
           metrics={sorted}
           jobs={jobs}
@@ -825,6 +860,8 @@ export default function ScheduleOfValuesPage() {
           emptyMessage={search ? "No jobs match your search." : "No active jobs yet — add one in Job Setup."}
           showAppColumn
         />
+        </div>
+        {tutorialOverlay}
       </div>
     );
   }
@@ -845,7 +882,7 @@ export default function ScheduleOfValuesPage() {
           </button>
           <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-navy">Pay Applications</h1>
-          <InfoTip title="This job's pay applications">
+          <InfoTip title="This job's pay applications" action={{ label: "Show me step by step", onClick: () => setTutorialStep(PAY_APP_TUTORIAL_FIRST.bubbles) }}>
             <p>Every pay app for this job is listed here. Click one to edit it, or start the next application.</p>
             <p>A certified pay app is locked. To correct an amount, start the next application instead.</p>
           </InfoTip>
@@ -855,7 +892,7 @@ export default function ScheduleOfValuesPage() {
 
         {/* Job summary strip */}
         {bubbleJobMetrics && (
-          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+          <div data-tour="sov-job-summary" className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
@@ -919,7 +956,7 @@ export default function ScheduleOfValuesPage() {
         {isLoadingApps ? (
           <p className="text-sm text-gray-500">Loading pay applications…</p>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div data-tour="sov-app-cards" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {jobApps.map((app) => {
               const isEligible = app.id === eligibleDeleteId;
               const isConfirming = app.id === deletingAppId;
@@ -1085,6 +1122,7 @@ export default function ScheduleOfValuesPage() {
             </button>
           </div>
         )}
+        {tutorialOverlay}
       </div>
     );
   }
@@ -1105,7 +1143,7 @@ export default function ScheduleOfValuesPage() {
           </button>
           <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-navy">Create Pay App</h1>
-          <InfoTip title="Enter this period's billing">
+          <InfoTip title="Enter this period's billing" action={{ label: "Show me step by step", onClick: () => setTutorialStep(PAY_APP_TUTORIAL_FIRST.form) }}>
             <p>Enter what you completed this period on each line of the Schedule of Values.</p>
             <p>What you billed before carries forward automatically. Syntriq works out the totals, percent complete, balance to finish and retention for you.</p>
             <p>You can download the SOV from this page.</p>
@@ -1200,6 +1238,7 @@ export default function ScheduleOfValuesPage() {
           </button>
           <button
             type="button"
+            data-tour="sov-save"
             onClick={handleSave}
             disabled={!job || isSaving || isLoadingItems || exceedsContractValue || hasOverBilledItem || isLocked}
             className="rounded-lg border border-teal px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/10 disabled:opacity-50"
@@ -1208,6 +1247,7 @@ export default function ScheduleOfValuesPage() {
           </button>
           <button
             type="button"
+            data-tour="sov-download"
             onClick={handleDownloadSOV}
             disabled={!job || exceedsContractValue || hasOverBilledItem}
             className="rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal/90 disabled:opacity-50"
@@ -1217,6 +1257,7 @@ export default function ScheduleOfValuesPage() {
           {canRevise && (
             <button
               type="button"
+              data-tour="sov-certify"
               onClick={handleMarkCertifiedFromForm}
               disabled={certifyingId === currentPayApp?.id}
               className="rounded-lg border border-teal px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/10 disabled:opacity-50"
@@ -1361,6 +1402,7 @@ export default function ScheduleOfValuesPage() {
         onAddItem={contractLocked || isLocked ? undefined : addLineItem}
       />
 
+      <div data-tour="sov-co">
       <SOVTable
         title="Change orders"
         itemLabel="CO #"
@@ -1372,8 +1414,11 @@ export default function ScheduleOfValuesPage() {
         showSkipRows={showSkipRows}
         lockDefinition
       />
+      </div>
 
-      <SOVGrandTotal lineItems={lineItems} changeOrders={changeOrders} cwRate={cwRate} smRate={smRate} />
+      <div data-tour="sov-total">
+        <SOVGrandTotal lineItems={lineItems} changeOrders={changeOrders} cwRate={cwRate} smRate={smRate} />
+      </div>
 
       {smOpenIndex !== null && job && currentPayApp && smData && lineItems[smOpenIndex] && (
         <StoredMaterialsPanel
@@ -1390,6 +1435,8 @@ export default function ScheduleOfValuesPage() {
           onSaved={handleStoredMaterialsSaved}
         />
       )}
+
+      {tutorialOverlay}
 
       {showDownloadPrompt && (
         <DownloadPackagePromptModal

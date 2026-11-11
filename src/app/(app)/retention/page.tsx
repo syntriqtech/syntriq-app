@@ -1,6 +1,8 @@
 "use client";
 
 import InfoTip from "@/components/InfoTip";
+import StepTutorial from "@/components/StepTutorial";
+import { RETENTION_TUTORIAL_STEPS, RETENTION_TUTORIAL_HISTORY_STEP } from "@/lib/retentionTutorial";
 import { Fragment, useEffect, useState } from "react";
 import { useJobs } from "@/hooks/useJobs";
 import { DbJob, fetchJobById } from "@/lib/jobs";
@@ -74,6 +76,7 @@ export default function RetentionPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [tutorialStep, setTutorialStep] = useState<number | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [markPaid, setMarkPaid] = useState<MarkPaidState | null>(null);
   const [markPaidStage, setMarkPaidStage] = useState<MarkPaidStage>({ kind: "verifying" });
@@ -380,13 +383,25 @@ export default function RetentionPage() {
     );
   }
 
+  // The tutorial's "Release history" step opens the first job that has releases, so there's something to look at.
+  function goTutorial(n: number | null) {
+    if (n === RETENTION_TUTORIAL_HISTORY_STEP) {
+      const withReleases = rows.find((r) => r.releases.length > 0);
+      if (withReleases) setExpandedJobId(withReleases.jobId);
+    }
+    setTutorialStep(n);
+  }
+  const firstBillRowId = rows.find((r) => r.status !== "fully_released")?.jobId;
+  // Any popup pauses the tutorial while it's open, so the two never overlap.
+  const popupOpen = !!modal || !!markPaid || !!fundingModal;
+
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
       <div>
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-navy">Retention</h1>
-          <InfoTip title="Retention">
+          <InfoTip title="Retention" action={rows.length > 0 ? { label: "Show me step by step", onClick: () => goTutorial(0) } : undefined}>
             <p>Retention is money a GC holds back from your payments until the job is done. This page tracks what&apos;s been held and released across all your active jobs.</p>
             <p>The cards show what&apos;s held in total and what&apos;s available to release. Press <strong>Bill Retention</strong> on a job when you&apos;re ready to bill it, and record the payment when the money arrives. Release History keeps a record.</p>
             <p>When a job is fully funded, mark it so it moves to the Archive.</p>
@@ -398,7 +413,7 @@ export default function RetentionPage() {
       </div>
 
       {/* Summary strip */}
-      <div className="grid grid-cols-1 divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white shadow-sm sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+      <div data-tour="ret-summary" className="grid grid-cols-1 divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white shadow-sm sm:grid-cols-4 sm:divide-x sm:divide-y-0">
         <div className="p-5">
           <div className="text-sm text-gray-500">Total held</div>
           <div className="mt-1 text-2xl font-bold text-navy">{currency.format(summary.totalHeld)}</div>
@@ -446,7 +461,7 @@ export default function RetentionPage() {
           <p className="mt-1 text-xs text-gray-400">Retention appears here once jobs have SOV data saved.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <div data-tour="ret-table" className="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">
@@ -462,7 +477,7 @@ export default function RetentionPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {rows.map((row) => (
+              {rows.map((row, rowIndex) => (
                 <Fragment key={row.jobId}>
                   <tr
                     className={
@@ -504,7 +519,7 @@ export default function RetentionPage() {
                     <td className="px-5 py-3.5 align-middle text-right tabular-nums text-gray-600">
                       {pct.format(row.percentBilled / 100)}
                     </td>
-                    <td className="px-5 py-3.5 align-middle">
+                    <td data-tour={rowIndex === 0 ? "ret-status" : undefined} className="px-5 py-3.5 align-middle">
                       <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLE[row.status] ?? ""}`}>
                         {STATUS_LABEL[row.status] ?? row.status}
                       </span>
@@ -515,6 +530,7 @@ export default function RetentionPage() {
                       ) : (
                         <button
                           type="button"
+                          data-tour={row.jobId === firstBillRowId ? "ret-bill" : undefined}
                           onClick={() => {
                             const fullJob = jobs.find((j) => j.id === row.jobId);
                             if (fullJob) setModal({ row, job: fullJob });
@@ -530,7 +546,7 @@ export default function RetentionPage() {
                   {/* Expanded release history */}
                   {expandedJobId === row.jobId && row.releases.length > 0 && (
                     <tr key={`${row.jobId}-releases`} className="bg-gray-50/70">
-                      <td colSpan={9} className="px-8 pb-4 pt-2">
+                      <td data-tour="ret-history" colSpan={9} className="px-8 pb-4 pt-2">
                         <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Release History</p>
                         <div className="rounded-xl border border-gray-100 overflow-hidden">
                           <table className="w-full text-xs">
@@ -782,6 +798,10 @@ export default function RetentionPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {tutorialStep !== null && !popupOpen && (
+        <StepTutorial steps={RETENTION_TUTORIAL_STEPS} step={tutorialStep} setStep={goTutorial} />
       )}
 
       {/* Retention Release Wizard */}

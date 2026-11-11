@@ -1,6 +1,8 @@
 "use client";
 
 import InfoTip from "@/components/InfoTip";
+import StepTutorial from "@/components/StepTutorial";
+import { CHANGE_ORDER_TUTORIAL_STEPS, CHANGE_ORDER_TUTORIAL_FIRST, CHANGE_ORDER_TUTORIAL_FORM_STEP } from "@/lib/changeOrderTutorial";
 import { useEffect, useState } from "react";
 import { useJobs } from "@/hooks/useJobs";
 import {
@@ -99,6 +101,20 @@ export default function ChangeOrdersPage() {
 
   // ── View state ────────────────────────────────────────────────────────────
   const [view, setView] = useState<"list" | "cards">("list");
+  const [tutorialStep, setTutorialStep] = useState<number | null>(null);
+
+  // Moving the tutorial back to a step on the job list also takes the page back to that screen.
+  function goTutorial(n: number | null) {
+    if (n !== null && tutorialStep !== null && n < tutorialStep) {
+      const target = CHANGE_ORDER_TUTORIAL_STEPS[n].view;
+      if (target !== view) setView(target);
+    }
+    // The "Fill in the details" step needs the New Change Order form open; leaving it closes the form.
+    if (n === CHANGE_ORDER_TUTORIAL_FORM_STEP) setShowQuickAdd(true);
+    else if (n !== null && tutorialStep === CHANGE_ORDER_TUTORIAL_FORM_STEP) setShowQuickAdd(false);
+    setTutorialStep(n);
+  }
+  const tutorialView = tutorialStep !== null ? CHANGE_ORDER_TUTORIAL_STEPS[tutorialStep]?.view : null;
 
   // ── List state ────────────────────────────────────────────────────────────
   const [metrics, setMetrics] = useState<JobMetrics[]>([]);
@@ -178,6 +194,8 @@ export default function ChangeOrdersPage() {
   async function handleSelectJob(jobId: string) {
     const selected = jobs.find((j) => j.id === jobId);
     if (!selected) return;
+    // Mid-tutorial, picking a job carries the tutorial on to that job's change orders.
+    if (tutorialView === "list") setTutorialStep(CHANGE_ORDER_TUTORIAL_FIRST.cards);
     setSelectedJob(selected);
     setSelectedJobMetrics(metrics.find((m) => m.id === jobId) ?? null);
     setJobCos([]);
@@ -197,9 +215,23 @@ export default function ChangeOrdersPage() {
   }
 
   // ── Cards handlers ────────────────────────────────────────────────────────
+  // Closing the New Change Order form (saved or not) also carries the tutorial on past the form step.
+  function closeQuickAdd() {
+    setShowQuickAdd(false);
+    if (tutorialStep === CHANGE_ORDER_TUTORIAL_FORM_STEP) setTutorialStep(CHANGE_ORDER_TUTORIAL_FORM_STEP + 1);
+  }
+
   function handleCreated(co: ChangeOrder) {
     setJobCos((prev) => [co, ...prev]);
-    setShowQuickAdd(false);
+    closeQuickAdd();
+  }
+
+  // Opening the form mid-tutorial moves the tutorial onto the form step.
+  function openQuickAdd() {
+    setShowQuickAdd(true);
+    if (tutorialView === "cards" && tutorialStep !== null && tutorialStep < CHANGE_ORDER_TUTORIAL_FORM_STEP) {
+      setTutorialStep(CHANGE_ORDER_TUTORIAL_FORM_STEP);
+    }
   }
 
   function handleUpdated(updated: ChangeOrder) {
@@ -312,13 +344,35 @@ export default function ChangeOrdersPage() {
   // ══════════════════════════════════════════════════════════════════════════
   // LIST VIEW
   // ══════════════════════════════════════════════════════════════════════════
+  // Any other popup pauses the tutorial while it's open, so the two never overlap.
+  const popupOpen =
+    !!detailCo || showImport || showProUpgrade || (showQuickAdd && tutorialStep !== CHANGE_ORDER_TUTORIAL_FORM_STEP);
+  const tutorialOverlay =
+    tutorialStep !== null && tutorialView === view && !popupOpen ? (
+      <StepTutorial
+        steps={CHANGE_ORDER_TUTORIAL_STEPS}
+        step={tutorialStep}
+        setStep={goTutorial}
+        nextOverrides={{
+          // Next on "Pick a job" opens the first job.
+          1: () => {
+            if (sortedMetrics[0]) handleSelectJob(sortedMetrics[0].id);
+            else setTutorialStep(null);
+          },
+          // Next on "Add a change order" opens the form; Next on the form closes it without adding anything.
+          3: () => openQuickAdd(),
+          4: () => closeQuickAdd(),
+        }}
+      />
+    ) : null;
+
   if (view === "list") {
     return (
       <div className="flex flex-col gap-6">
         <div>
           <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-navy">Change Orders</h1>
-          <InfoTip title="Change orders">
+          <InfoTip title="Change orders" action={{ label: "Show me step by step", onClick: () => setTutorialStep(CHANGE_ORDER_TUTORIAL_FIRST.list) }}>
             <p>Pick a job to see and manage its change orders. Change orders adjust the original contract, so each job shows its original contract, net change orders and revised contract.</p>
             <p><strong>Import Change Order (AI)</strong> reads a change order file for you. Check what it fills in before you save.</p>
           </InfoTip>
@@ -326,7 +380,9 @@ export default function ChangeOrdersPage() {
           <p className="mt-1 text-sm text-gray-500">Select a job to view and manage its change orders.</p>
         </div>
 
-        <KpiStrip items={coKpiItems} />
+        <div data-tour="co-kpi">
+          <KpiStrip items={coKpiItems} />
+        </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="w-full sm:w-72">
@@ -357,6 +413,7 @@ export default function ChangeOrdersPage() {
           </div>
         </div>
 
+        <div data-tour="co-job-list">
         <JobListTable
           metrics={sortedMetrics}
           jobs={jobs}
@@ -365,6 +422,8 @@ export default function ChangeOrdersPage() {
           emptyMessage={search ? "No jobs match your search." : "No jobs yet — add one in Job Setup."}
           showCoCountColumn
         />
+        </div>
+        {tutorialOverlay}
       </div>
     );
   }
@@ -386,7 +445,7 @@ export default function ChangeOrdersPage() {
           </button>
           <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-navy">Change Orders</h1>
-          <InfoTip title="This job's change orders">
+          <InfoTip title="This job's change orders" action={{ label: "Show me step by step", onClick: () => setTutorialStep(CHANGE_ORDER_TUTORIAL_FIRST.cards) }}>
             <p>Add a new change order, or open one to review it or update its status.</p>
             <p>Deleted change orders stay in Recently deleted, so you can restore one if you made a mistake.</p>
           </InfoTip>
@@ -394,6 +453,7 @@ export default function ChangeOrdersPage() {
         </div>
         <button
           type="button"
+          data-tour="co-import"
           onClick={() => (plan === "pro" ? setShowImport(true) : setShowProUpgrade(true))}
           className="rounded-lg border border-teal px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/10"
         >
@@ -403,7 +463,7 @@ export default function ChangeOrdersPage() {
 
       {/* Job header strip */}
       {selectedJob && (
-        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+        <div data-tour="co-job-header" className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
@@ -456,7 +516,7 @@ export default function ChangeOrdersPage() {
       )}
 
       {/* Filter chips */}
-      <div className="flex gap-2 flex-wrap">
+      <div data-tour="co-filters" className="flex gap-2 flex-wrap">
         {(Object.keys(FILTER_LABELS) as FilterKey[]).map((key) => (
           <button
             key={key}
@@ -477,7 +537,7 @@ export default function ChangeOrdersPage() {
       {isLoadingCos ? (
         <p className="text-sm text-gray-500">Loading change orders…</p>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div data-tour="co-cards" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {/* Existing CO cards */}
           {filteredCos.map((co) => {
             const displayId = co.coNumber ?? co.pcoNumber ?? "—";
@@ -552,7 +612,8 @@ export default function ChangeOrdersPage() {
           {/* + New change order card — always visible */}
           <button
             type="button"
-            onClick={() => setShowQuickAdd(true)}
+            data-tour="co-new"
+            onClick={openQuickAdd}
             className="flex min-h-[180px] flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-gray-200 bg-white p-5 transition-all hover:border-teal/50 hover:bg-teal/5"
           >
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal/10 text-xl font-light text-teal">
@@ -567,7 +628,7 @@ export default function ChangeOrdersPage() {
       )}
 
       {/* Recently Deleted */}
-      <div className="border-t border-gray-100 pt-4">
+      <div data-tour="co-deleted" className="border-t border-gray-100 pt-4">
         <button
           type="button"
           onClick={handleToggleDeleted}
@@ -652,12 +713,14 @@ export default function ChangeOrdersPage() {
         )}
       </div>
 
+      {tutorialOverlay}
+
       {/* Quick Add Modal */}
       {showQuickAdd && jobs.length > 0 && (
         <ChangeOrderQuickAdd
           jobs={jobs}
           defaultJobId={selectedJob?.id}
-          onClose={() => setShowQuickAdd(false)}
+          onClose={closeQuickAdd}
           onCreated={handleCreated}
         />
       )}
