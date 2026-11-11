@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useJobs } from "@/hooks/useJobs";
 import { computeJobMetrics } from "@/lib/dashboardMetrics";
 import { fetchPayApplicationsByJob, PayApplication } from "@/lib/payApplicationsDb";
-import { fetchPayAppPayments } from "@/lib/payAppPaymentsDb";
+import { fetchPayAppPayments, recordPayment } from "@/lib/payAppPaymentsDb";
 import { fetchChangeOrders, ChangeOrder, ChangeOrderStatus } from "@/lib/changeOrdersDb";
 import { fetchRetentionReleases, RetentionRelease } from "@/lib/retentionReleasesDb";
 import DonutPercent from "@/components/DonutPercent";
@@ -161,6 +161,13 @@ export default function JobDetailPage() {
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
   const [releases, setReleases] = useState<RetentionRelease[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // "Mark paid" popup for one pay app
+  const [payTarget, setPayTarget] = useState<PayAppWithStatus | null>(null);
+  const [payDate, setPayDate] = useState("");
+  const [payAmount, setPayAmount] = useState("");
+  const [payRef, setPayRef] = useState("");
+  const [paySaving, setPaySaving] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -229,6 +236,47 @@ export default function JobDetailPage() {
       sessionStorage.setItem("sov_start_next_app", "1");
     }
     router.push("/sov");
+  }
+
+  function openMarkPaid(app: PayAppWithStatus) {
+    setPayTarget(app);
+    setPayDate(new Date().toISOString().slice(0, 10));
+    setPayAmount(Math.max(0, app.currentPaymentDue - app.totalPaid).toFixed(2));
+    setPayRef("");
+    setPayError(null);
+  }
+
+  async function handleMarkPaid() {
+    if (!payTarget) return;
+    const amount = Math.round(parseFloat(payAmount.replace(/[$,]/g, "")) * 100) / 100;
+    const balance = Math.round((payTarget.currentPaymentDue - payTarget.totalPaid) * 100) / 100;
+    const today = new Date().toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(payDate)) return setPayError("Enter a valid payment date.");
+    if (payDate > today) return setPayError("Payment date can't be in the future.");
+    if (!(amount > 0)) return setPayError("Enter the amount you received.");
+    if (amount > balance + 0.005) return setPayError(`That's more than the ${currencyFull.format(balance)} still owed.`);
+    setPaySaving(true);
+    setPayError(null);
+    try {
+      await recordPayment(payTarget.id, payDate, amount, payRef.trim(), "");
+      const target = payTarget;
+      setPayApps((apps) =>
+        apps.map((a) => {
+          if (a.id !== target.id) return a;
+          const totalPaid = a.totalPaid + amount;
+          return {
+            ...a,
+            totalPaid,
+            paymentStatus: totalPaid < a.currentPaymentDue - 0.01 ? "Partial" : "Paid",
+          };
+        })
+      );
+      setPayTarget(null);
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : "Could not record the payment.");
+    } finally {
+      setPaySaving(false);
+    }
   }
 
   function handleViewSov() {
@@ -439,6 +487,24 @@ export default function JobDetailPage() {
                           >
                             {app.paymentStatus}
                           </span>
+                          {app.paymentStatus !== "Paid" &&
+                            (app.status === "certified" ? (
+                              <button
+                                type="button"
+                                onClick={() => openMarkPaid(app)}
+                                className="ml-3 text-xs font-semibold text-teal hover:underline"
+                              >
+                                Mark paid
+                              </button>
+                            ) : (
+                              <Link
+                                href={`/pay-applications/${app.id}`}
+                                title="A pay app must be certified before you can record a payment"
+                                className="ml-3 text-xs font-semibold text-gray-400 hover:text-teal hover:underline"
+                              >
+                                Certify first
+                              </Link>
+                            ))}
                         </td>
                         <td className="px-6 py-3 text-right">
                           {app.pdfUrl && (
@@ -702,6 +768,68 @@ export default function JobDetailPage() {
         </div>
       </div>
       <JobsTutorial page="detail" step={tutorial.step} go={tutorial.go} />
+      {payTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => !paySaving && setPayTarget(null)}
+        >
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-navy">Mark pay app #{payTarget.applicationNumber} paid</h3>
+            <p className="mt-0.5 text-xs text-gray-500">
+              Still owed: {currencyFull.format(Math.max(0, payTarget.currentPaymentDue - payTarget.totalPaid))}
+            </p>
+            <div className="mt-4 flex flex-col gap-3">
+              <label className="text-sm font-medium text-gray-700">
+                Payment date
+                <input
+                  type="date"
+                  value={payDate}
+                  onChange={(e) => setPayDate(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-teal focus:outline-none focus:ring-1 focus:ring-teal"
+                />
+              </label>
+              <label className="text-sm font-medium text-gray-700">
+                Amount received
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-teal focus:outline-none focus:ring-1 focus:ring-teal"
+                />
+              </label>
+              <label className="text-sm font-medium text-gray-700">
+                Check / reference # (optional)
+                <input
+                  type="text"
+                  value={payRef}
+                  onChange={(e) => setPayRef(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-teal focus:outline-none focus:ring-1 focus:ring-teal"
+                />
+              </label>
+              {payError && <p className="text-sm text-red-600">{payError}</p>}
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPayTarget(null)}
+                disabled={paySaving}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleMarkPaid}
+                disabled={paySaving}
+                className="rounded-lg bg-teal px-5 py-2 text-sm font-semibold text-white hover:bg-teal/90 disabled:opacity-50"
+              >
+                {paySaving ? "Saving…" : "Save payment"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

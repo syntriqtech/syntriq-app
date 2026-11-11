@@ -41,7 +41,7 @@ export const RETENTION_TUTORIAL_STEPS: TourStep[] = [
     layout: "anchored",
     anchors: ['[data-tour="ret-history"]', '[data-tour="ret-table"]'],
     title: "Release history",
-    body: "Click a job's name to open its Release History. Each release shows its number, date, whether it's Partial or Final, the amount, what's been paid, and its status: Draft, Billed or Paid. Download Package builds the paperwork for that release. Once you've billed retention, the history shows up here.",
+    body: "Click the small arrow next to a job's name to open its Release History (clicking the name itself opens the job). Each release shows its number, date, whether it's Partial or Final, the amount, what's been paid, and its status: Draft, Billed or Paid. Download Package builds the paperwork for that release. Once you've billed retention, the history shows up here.",
   },
   {
     id: "ret-payment",

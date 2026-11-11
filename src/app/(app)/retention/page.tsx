@@ -486,22 +486,25 @@ export default function RetentionPage() {
                     }
                   >
                     <td className="px-5 py-3.5 align-middle">
-                      <button
-                        type="button"
-                        onClick={() => setExpandedJobId(expandedJobId === row.jobId ? null : row.jobId)}
-                        className="group block text-left leading-snug"
-                      >
-                        <span className="font-semibold text-navy group-hover:text-teal">
-                          {row.jobName || <span className="text-amber-600">⚠ No name</span>}
-                        </span>{" "}
-                        <span className="whitespace-nowrap text-xs font-normal text-gray-400">#{row.jobNumber}</span>
+                      <div className="leading-snug">
+                        <Link href={`/jobs/${row.jobId}`} className="group text-left">
+                          <span className="font-semibold text-navy group-hover:text-teal group-hover:underline">
+                            {row.jobName || <span className="text-amber-600">⚠ No name</span>}
+                          </span>{" "}
+                          <span className="whitespace-nowrap text-xs font-normal text-gray-400">#{row.jobNumber}</span>
+                        </Link>
                         {row.releases.length > 0 && (
-                          <span className="ml-1.5 inline-flex items-center gap-1 whitespace-nowrap align-middle text-xs font-normal text-gray-400">
+                          <button
+                            type="button"
+                            title="Show release history"
+                            onClick={() => setExpandedJobId(expandedJobId === row.jobId ? null : row.jobId)}
+                            className="ml-1.5 inline-flex items-center gap-1 whitespace-nowrap rounded px-1 align-middle text-xs font-normal text-gray-400 hover:bg-gray-100 hover:text-teal"
+                          >
                             {row.releases.length > 1 && <span>{row.releases.length} releases</span>}
                             <span aria-hidden="true">{expandedJobId === row.jobId ? "▴" : "▾"}</span>
-                          </span>
+                          </button>
                         )}
-                      </button>
+                      </div>
                     </td>
                     <td className="px-5 py-3.5 align-middle text-navy">{row.customer}</td>
                     <td className="px-5 py-3.5 align-middle text-right tabular-nums text-navy">
