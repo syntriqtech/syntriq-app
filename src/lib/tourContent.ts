@@ -31,6 +31,15 @@ export const PHASE1_STEPS: TourStep[] = [
     layout: "modal",
     title: "Welcome to Syntriq",
     body: "Let's get your first job in. It takes about 5 minutes.",
+    next: "p1-info",
+  },
+  {
+    id: "p1-info",
+    phase: 1,
+    layout: "modal",
+    title: "Look for the \"i\" icons",
+    body: "Stuck on a page? Select the small \"i\" icon next to a title or field. It opens a short how-to, and some have a step-by-step walkthrough.",
+    prev: "p1-welcome",
     next: "p1-choose",
   },
   {
@@ -39,7 +48,7 @@ export const PHASE1_STEPS: TourStep[] = [
     layout: "modal",
     title: "How do you want to add your first job?",
     body: "Pick the way that suits you. You can always add more jobs later.",
-    prev: "p1-welcome",
+    prev: "p1-info",
   },
   {
     id: "p1-customer",
@@ -277,7 +286,7 @@ export function buildPhase2Steps(navHrefsInOrder: string[]): TourStep[] {
       phase: 2,
       layout: "modal",
       title: "Take a quick tour?",
-      body: "See what each part of Syntriq is for. It takes about 2 minutes.",
+      body: "See what each part of Syntriq is for. It takes about 2 minutes. Along the way, look for the small \"i\" icons on each page. Select one for a quick how-to.",
     },
     ...DASHBOARD_STEPS.map<TourStep>((s) => ({
       ...s,
@@ -310,7 +319,7 @@ export function buildPhase2Steps(navHrefsInOrder: string[]): TourStep[] {
     phase: 2,
     layout: "modal",
     title: "That is the tour",
-    body: "You can replay it any time from Help & Support.",
+    body: "You can replay it any time from Help & Support. Whenever you are unsure how to do something, select the small \"i\" icon next to it for a how-to.",
   });
 
   return steps;

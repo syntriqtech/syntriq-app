@@ -213,8 +213,35 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
               <button type="button" className={SECONDARY_BUTTON} onClick={skip}>
                 Skip for now
               </button>
-              <Button type="button" className="w-auto! px-5 py-2 text-sm" onClick={() => goTo("p1-choose")}>
+              <Button type="button" className="w-auto! px-5 py-2 text-sm" onClick={() => goTo("p1-info")}>
                 Start
+              </Button>
+            </>
+          }
+        />
+      );
+    }
+
+    if (step.id === "p1-info") {
+      return (
+        <TourOverlay
+          step={step}
+          onPause={onPause}
+          content={
+            <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm text-navy">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-teal/60 text-xs font-bold italic leading-none text-teal">
+                i
+              </span>
+              <span>This is what it looks like. You will find it all over Syntriq.</span>
+            </div>
+          }
+          actions={
+            <>
+              <button type="button" className={SECONDARY_BUTTON} onClick={() => goTo("p1-welcome")}>
+                Back
+              </button>
+              <Button type="button" className="w-auto! px-5 py-2 text-sm" onClick={() => goTo("p1-choose")}>
+                Got it
               </Button>
             </>
           }
