@@ -282,17 +282,25 @@ export default function PayApplicationsPage() {
             Track billing progress and payment status by job.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            // Use the single expanded job's context if exactly one is open
-            const expandedIds = Object.keys(expanded);
-            handleCreatePayApp(expandedIds.length === 1 ? expandedIds[0] : undefined);
-          }}
-          className="rounded-lg border border-teal px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/10"
-        >
-          + Create Pay Application
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Link
+            href="/pay-applications/record-check"
+            className="rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal/90"
+          >
+            Record a check
+          </Link>
+          <button
+            type="button"
+            onClick={() => {
+              // Use the single expanded job's context if exactly one is open
+              const expandedIds = Object.keys(expanded);
+              handleCreatePayApp(expandedIds.length === 1 ? expandedIds[0] : undefined);
+            }}
+            className="rounded-lg border border-teal px-4 py-2.5 text-sm font-semibold text-teal hover:bg-teal/10"
+          >
+            + Create Pay Application
+          </button>
+        </div>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
