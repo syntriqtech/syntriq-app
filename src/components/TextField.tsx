@@ -1,9 +1,12 @@
 "use client";
 
-import { InputHTMLAttributes, useState } from "react";
+import { InputHTMLAttributes, ReactNode, useState } from "react";
+import InfoTip from "@/components/InfoTip";
 
-type TextFieldProps = InputHTMLAttributes<HTMLInputElement> & {
+export type TextFieldProps =InputHTMLAttributes<HTMLInputElement> & {
   label: string;
+  /** Optional how-to text. When set, a small "i" icon appears next to the label. */
+  help?: ReactNode;
   prefix?: string;
   /** Highlights the field (amber border/background) — e.g. to flag a value that wasn't found by extraction and needs manual entry. */
   highlight?: boolean;
@@ -25,7 +28,7 @@ function EyeIcon({ open }: { open: boolean }) {
   );
 }
 
-export default function TextField({ label, id, prefix, highlight, error, type, ...inputProps }: TextFieldProps) {
+export default function TextField({ label, help, id, prefix, highlight, error, type, ...inputProps }: TextFieldProps) {
   const [showPassword, setShowPassword] = useState(false);
   const isPassword = type === "password";
 
@@ -42,9 +45,12 @@ export default function TextField({ label, id, prefix, highlight, error, type, .
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium text-navy">
-        {label}
-      </label>
+      <div className="flex items-center gap-1.5">
+        <label htmlFor={id} className="text-sm font-medium text-navy">
+          {label}
+        </label>
+        {help && <InfoTip title={label.replace(/\s*\*$/, "")}>{help}</InfoTip>}
+      </div>
       {prefix ? (
         <div className={wrapperClass}>
           <span className="select-none pl-4 pr-1 text-navy">{prefix}</span>

@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import TextField from "@/components/TextField";
+import InfoTip from "@/components/InfoTip";
+import AddressField from "@/components/AddressField";
 import Button from "@/components/Button";
 import { JobSetup } from "@/lib/jobSetupData";
 import { createJob, DbJob, fetchDeletedJobs, permanentlyDeleteJob, restoreJob, softDeleteJob, updateJob } from "@/lib/jobs";
@@ -405,7 +407,18 @@ export default function JobSetupPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-navy">Job Setup</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-navy">Job Setup</h1>
+            <InfoTip title="How to set up a job">
+              <ol>
+                <li>Fill in the job name, job #, customer (GC) and addresses.</li>
+                <li>Enter the contract value, contract date and retention rates.</li>
+                <li>Set the billing due day and billing platform so reminders land on the right date.</li>
+                <li>Click <strong>Create job</strong>. You can then build its Schedule of Values.</li>
+              </ol>
+              <p>Short on time? Use <strong>Job Import</strong> (top right) to fill the form from a file.</p>
+            </InfoTip>
+          </div>
           <p className="mt-1 text-sm text-gray-500">
             {editingJobId
               ? "Editing an existing project — update the fields below, then save."
@@ -488,6 +501,7 @@ export default function JobSetupPage() {
         </div>
         <TextField
           label="Job # *"
+          help="Your own internal job number for this project. It shows on your pay apps and lien waivers, so use the same number you use in your accounting."
           id="jobNumber"
           required
           value={form.jobNumber}
@@ -495,16 +509,17 @@ export default function JobSetupPage() {
         />
         <TextField
           label="GC project #"
+          help="The project number your customer (the GC) uses for this job. It's usually on your subcontract. Leave blank if they didn't give you one."
           id="architectProjectNumber"
           value={form.architectProjectNumber}
           onChange={(e) => handleChange("architectProjectNumber", e.target.value)}
         />
-        <TextField
+        <AddressField
           label="Job / site address *"
           id="jobAddress"
           required
           value={form.jobAddress}
-          onChange={(e) => handleChange("jobAddress", e.target.value)}
+          onValueChange={(v) => handleChange("jobAddress", v)}
         />
         <TextField
           label="Architect"
@@ -524,12 +539,12 @@ export default function JobSetupPage() {
           required
           placeholder="Start typing a GC name…"
         />
-        <TextField
+        <AddressField
           label="Customer billing address *"
           id="customerAddress"
           required
           value={form.customerAddress}
-          onChange={(e) => handleChange("customerAddress", e.target.value)}
+          onValueChange={(v) => handleChange("customerAddress", v)}
         />
         <TextField
           label="Owner"
@@ -537,11 +552,11 @@ export default function JobSetupPage() {
           value={form.owner}
           onChange={(e) => handleChange("owner", e.target.value)}
         />
-        <TextField
+        <AddressField
           label="Owner address"
           id="ownerAddress"
           value={form.ownerAddress}
-          onChange={(e) => handleChange("ownerAddress", e.target.value)}
+          onValueChange={(v) => handleChange("ownerAddress", v)}
         />
         <TextField
           label="Contract for (scope of work) *"
@@ -552,6 +567,7 @@ export default function JobSetupPage() {
         />
         <TextField
           label="Contract value *"
+          help="The original total of your subcontract, before any change orders. Add change orders later, not here. This is the number your Schedule of Values has to add up to."
           id="contractValue"
           prefix="$"
           inputMode="decimal"
@@ -571,6 +587,7 @@ export default function JobSetupPage() {
         />
         <TextField
           label="Retention rate — completed work (%) *"
+          help="The percent the GC holds back from each payment for work you've completed. Check your subcontract. 10 is common, so type 10 for 10%."
           id="retentionRateCW"
           type="number"
           min="0"
@@ -582,6 +599,7 @@ export default function JobSetupPage() {
         />
         <TextField
           label="Retention rate — stored materials (%) *"
+          help="The percent held back on materials you've bought and stored but not yet installed. It's often the same as the completed-work rate, but check your subcontract."
           id="retentionRateSM"
           type="number"
           min="0"
@@ -628,6 +646,7 @@ export default function JobSetupPage() {
         />
         <TextField
           label="Billing due day (day of month) *"
+          help="The day each month your GC needs your pay app submitted. Enter a number from 1 to 28. It's used for your billing reminders."
           id="billingDueDay"
           type="number"
           min="1"
@@ -648,6 +667,7 @@ export default function JobSetupPage() {
         <div>
           <TextField
             label="Billing platform *"
+            help="How you send this GC your pay app, such as Procore, GCPay or email. Pick one from the list or type a new one, and it will be saved for next time."
             id="billingPlatform"
             required
             value={form.billingPlatform}
