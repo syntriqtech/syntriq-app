@@ -16,6 +16,8 @@ import { fetchChangeOrders } from "@/lib/changeOrdersDb";
 import { STATUS_LABEL, STATUS_BADGE_STYLE } from "@/lib/payApplicationStatusUi";
 import TextField from "@/components/TextField";
 import Button from "@/components/Button";
+import InfoTip from "@/components/InfoTip";
+import PaymentTutorial, { usePaymentTutorial } from "@/components/PaymentTutorial";
 import { formatDate } from "@/lib/dateUtils";
 
 const currency = new Intl.NumberFormat("en-US", {
@@ -85,6 +87,7 @@ export default function PayApplicationsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<ExpandState>({});
+  const tutorial = usePaymentTutorial("list");
   const [sortBy, setSortBy] = useState<"jobNumber" | "customer">("jobNumber");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -179,6 +182,8 @@ export default function PayApplicationsPage() {
 
   // Expand/collapse per job (independent, lazy-loaded)
   async function handleToggle(jobId: string) {
+    // Mid-tutorial, opening a job carries the tutorial on to its pay apps.
+    if (tutorial.step === 0 && !expanded[jobId]) tutorial.go(1);
     if (expanded[jobId]) {
       setExpanded((prev) => { const next = { ...prev }; delete next[jobId]; return next; });
       return;
@@ -255,7 +260,24 @@ export default function PayApplicationsPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-navy">Record Payment</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-navy">Record Payment</h1>
+            <InfoTip
+              title="How to record a payment"
+              action={
+                summaries.length > 0
+                  ? { label: "Show me step by step", onClick: () => tutorial.go(0) }
+                  : undefined
+              }
+            >
+              <ol>
+                <li>Click the job you were paid on to see its pay apps.</li>
+                <li>Click <strong>View</strong> on the pay app the payment is for.</li>
+                <li>Open the <strong>Record Payments</strong> tab, enter the date and amount, and save.</li>
+              </ol>
+              <p>A pay app has to be certified before you can record a payment on it.</p>
+            </InfoTip>
+          </div>
           <p className="mt-1 text-sm text-gray-500">
             Track billing progress and payment status by job.
           </p>
@@ -367,7 +389,7 @@ export default function PayApplicationsPage() {
           </p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+        <div data-tour="pay-job-list" className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
 
           {/* Sort controls */}
           <div className="flex items-center gap-1 border-b border-gray-100 px-5 py-3">
@@ -492,7 +514,7 @@ export default function PayApplicationsPage() {
 
                   {/* ── Expanded apps sub-table ─────────────────── */}
                   {(isExpanded || isLoading) && (
-                    <div className="bg-gray-50/60 border-t border-gray-100 px-5 pb-4 pt-3">
+                    <div data-tour="pay-apps-panel" className="bg-gray-50/60 border-t border-gray-100 px-5 pb-4 pt-3">
                       {isLoading ? (
                         <p className="text-xs text-gray-400 py-3">Loading applications…</p>
                       ) : apps.length === 0 ? (
@@ -565,7 +587,11 @@ export default function PayApplicationsPage() {
                                       <Link
                                         href={`/pay-applications/${app.id}`}
                                         className="font-semibold text-teal hover:underline"
-                                        onClick={(e) => e.stopPropagation()}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          // Mid-tutorial, opening a pay app carries the tutorial on to its page.
+                                          if (tutorial.step === 1) tutorial.go(2, true);
+                                        }}
                                       >
                                         View →
                                       </Link>
@@ -595,6 +621,28 @@ export default function PayApplicationsPage() {
           </div>
         </div>
       )}
+      <PaymentTutorial
+        page="list"
+        step={tutorial.step}
+        go={tutorial.go}
+        nextOverrides={{
+          0: () => {
+            // Open the first job (which also moves the tutorial on), unless one is already open.
+            if (Object.keys(expanded).length > 0) return tutorial.go(1);
+            if (sortedSummaries[0]) handleToggle(sortedSummaries[0].jobId);
+            else tutorial.go(null);
+          },
+          1: () => {
+            const values = Object.values(expanded);
+            if (values.includes("loading")) return; // still fetching this job's pay apps
+            const firstApps = values.find((v): v is PayAppWithStatus[] => Array.isArray(v));
+            const firstApp = firstApps?.[0];
+            if (!firstApp) return tutorial.go(null);
+            tutorial.go(2, true);
+            router.push(`/pay-applications/${firstApp.id}`);
+          },
+        }}
+      />
     </div>
   );
 }

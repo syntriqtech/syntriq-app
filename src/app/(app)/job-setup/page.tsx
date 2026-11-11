@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import TextField from "@/components/TextField";
 import InfoTip from "@/components/InfoTip";
 import AddressField from "@/components/AddressField";
+import JobSetupTutorial from "@/components/JobSetupTutorial";
 import Button from "@/components/Button";
 import { JobSetup } from "@/lib/jobSetupData";
 import { createJob, DbJob, fetchDeletedJobs, permanentlyDeleteJob, restoreJob, softDeleteJob, updateJob } from "@/lib/jobs";
@@ -107,6 +108,7 @@ export default function JobSetupPage() {
   const router = useRouter();
   const { jobs, isLoading, setJobs } = useJobs();
   const [form, setForm] = useState(EMPTY_FORM);
+  const [tutorialStep, setTutorialStep] = useState<number | null>(null);
   const [billingPlatforms, setBillingPlatforms] = useState<string[]>([]);
   const [gcs, setGcs] = useState<GeneralContractor[]>([]);
 
@@ -409,7 +411,7 @@ export default function JobSetupPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-navy">Job Setup</h1>
-            <InfoTip title="How to set up a job">
+            <InfoTip title="How to set up a job" action={{ label: "Show me step by step", onClick: () => setTutorialStep(0) }}>
               <ol>
                 <li>Fill in the job name, job #, customer (GC) and addresses.</li>
                 <li>Enter the contract value, contract date and retention rates.</li>
@@ -966,6 +968,8 @@ export default function JobSetupPage() {
           </div>
         </div>
       )}
+
+      <JobSetupTutorial step={tutorialStep} setStep={setTutorialStep} />
     </div>
   );
 }

@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import InfoTip from "@/components/InfoTip";
+import PaymentTutorial, { usePaymentTutorial } from "@/components/PaymentTutorial";
+import { PAYMENT_TUTORIAL_FIRST_RECORD_STEP } from "@/lib/paymentTutorial";
 import { useParams, useRouter } from "next/navigation";
 import {
   fetchPayApplicationById,
@@ -46,6 +49,10 @@ export default function PayApplicationDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "payment">("overview");
+  // Tutorial steps say which tab they need open; this switches to it.
+  const tutorial = usePaymentTutorial("detail", (s) => {
+    if (s.tab) setActiveTab(s.tab);
+  });
 
   // Payment recording form
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
@@ -416,7 +423,7 @@ export default function PayApplicationDetailPage() {
               Billing platform: {job.billingPlatform || "Not set"}
             </p>
           </div>
-          <div className="flex flex-col items-end gap-2">
+          <div data-tour="pay-status" className="flex flex-col items-end gap-2">
             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_BADGE_STYLE[payApp.status]}`}>
               {STATUS_LABEL[payApp.status]}
             </span>
@@ -460,7 +467,12 @@ export default function PayApplicationDetailPage() {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab("payment")}
+            data-tour="pay-tab-record"
+            onClick={() => {
+              setActiveTab("payment");
+              // Mid-tutorial, opening this tab carries the tutorial on.
+              if (tutorial.step === 3) tutorial.go(4);
+            }}
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               activeTab === "payment"
                 ? "border-b-2 border-teal text-teal"
@@ -581,10 +593,23 @@ export default function PayApplicationDetailPage() {
         <div className="flex flex-col gap-6">
           {/* Record payment form */}
           <form onSubmit={handleRecordPayment} className="rounded-2xl border border-gray-100 bg-white p-6">
-            <h2 className="text-base font-bold text-navy">Record Payment</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-navy">Record Payment</h2>
+              <InfoTip
+                title="How to record a payment"
+                action={{ label: "Show me step by step", onClick: () => tutorial.go(PAYMENT_TUTORIAL_FIRST_RECORD_STEP) }}
+              >
+                <ol>
+                  <li>Enter the date the money arrived and the amount you received.</li>
+                  <li>Optionally add the check, wire or ACH number.</li>
+                  <li>Press <strong>Record Payment</strong>.</li>
+                </ol>
+                <p>The pay app has to be certified first.</p>
+              </InfoTip>
+            </div>
 
             {/* Payment summary strip */}
-            <div className="mt-4 grid grid-cols-4 divide-x divide-gray-100 rounded-xl border border-gray-100 bg-gray-50">
+            <div data-tour="pay-summary" className="mt-4 grid grid-cols-4 divide-x divide-gray-100 rounded-xl border border-gray-100 bg-gray-50">
               <div className="px-4 py-3">
                 <p className="text-[11px] text-gray-400">Amount due</p>
                 <p className="mt-0.5 text-sm font-bold text-navy">{currency.format(amountDue)}</p>
@@ -607,7 +632,7 @@ export default function PayApplicationDetailPage() {
             </div>
 
             {payApp.status !== "certified" && payApp.status !== "paid" ? (
-              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
+              <div data-tour="pay-gate" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
                 <p className="text-sm font-semibold text-amber-800">This application isn&apos;t certified yet.</p>
                 <p className="mt-1 text-xs text-amber-700">
                   Mark certified to enable payments.
@@ -622,7 +647,7 @@ export default function PayApplicationDetailPage() {
                 </button>
               </div>
             ) : balance <= 0.01 ? (
-              <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-4">
+              <div data-tour="pay-gate" className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-4">
                 <p className="text-sm font-semibold text-green-800">This pay application is paid in full.</p>
                 <p className="mt-1 text-xs text-green-700">
                   {currency.format(totalPaid)} received — no further payment can be recorded.
@@ -630,9 +655,10 @@ export default function PayApplicationDetailPage() {
               </div>
             ) : (
               <>
-                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div data-tour="pay-fields" className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <TextField
                     label="Payment date"
+                    help="The day the money actually arrived, such as the check date or the wire or ACH date. It can't be in the future."
                     id="paymentDate"
                     type="date"
                     required
@@ -644,6 +670,7 @@ export default function PayApplicationDetailPage() {
                   <div className="flex flex-col gap-1.5">
                     <TextField
                       label="Amount paid"
+                      help="How much you received. Select Use this to fill in the full balance. A partial payment is fine, and you can record the rest later."
                       id="amountPaid"
                       type="number"
                       min="0"
@@ -675,6 +702,7 @@ export default function PayApplicationDetailPage() {
                   </div>
                   <TextField
                     label="Check / wire / ACH number (optional)"
+                    help="The check number, or the wire or ACH confirmation number. It's optional, but it makes the payment easy to match to your bank statement."
                     id="referenceNumber"
                     value={referenceNumber}
                     onChange={(e) => setReferenceNumber(e.target.value)}
@@ -694,7 +722,7 @@ export default function PayApplicationDetailPage() {
                   </div>
                 </div>
                 {recordError && <p className="mt-3 text-sm text-red-600">{recordError}</p>}
-                <div className="mt-4">
+                <div data-tour="pay-record-btn" className="mt-4">
                   <Button type="submit" disabled={isRecording} className="w-auto px-6">
                     {isRecording ? "Recording…" : "Record Payment"}
                   </Button>
@@ -704,7 +732,7 @@ export default function PayApplicationDetailPage() {
           </form>
 
           {/* Payment history */}
-          <div className="rounded-2xl border border-gray-100 bg-white p-6">
+          <div data-tour="pay-history" className="rounded-2xl border border-gray-100 bg-white p-6">
             <h2 className="text-base font-bold text-navy">Payment History</h2>
             {payments.length === 0 ? (
               <p className="mt-4 text-sm text-gray-500">No payments recorded yet.</p>
@@ -834,6 +862,13 @@ export default function PayApplicationDetailPage() {
           )}
         </div>
       )}
+
+      <PaymentTutorial
+        page="detail"
+        step={tutorial.step}
+        go={tutorial.go}
+        isCertified={payApp.status === "certified" || payApp.status === "paid"}
+      />
 
       {/* Uncertify confirmation */}
       {showUncertifyConfirm && payApp && (
