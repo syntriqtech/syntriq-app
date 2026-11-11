@@ -238,6 +238,11 @@ export default function CompanySetupPage() {
                 <h2 className="text-center text-lg font-semibold text-navy">
                   What&apos;s your business email?
                 </h2>
+                <p className="text-center text-sm text-gray-500">
+                  This is the main point of contact for your company. It is saved to your company
+                  profile and used as the contact on your billing paperwork, so use an address you
+                  check regularly.
+                </p>
                 <TextField
                   id="contactEmail"
                   label="Email address"

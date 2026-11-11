@@ -57,18 +57,26 @@ function ChoiceCard({
   title,
   description,
   showPro,
+  locked,
   onClick,
 }: {
   title: string;
   description: string;
   showPro?: boolean;
+  /** Greyed out and not clickable (used for Pro features on the Basic plan). */
+  locked?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full flex-col gap-1 rounded-xl border border-gray-200 bg-white p-4 text-left transition-colors hover:border-teal hover:bg-teal/5 focus:outline-none focus:ring-2 focus:ring-teal/40"
+      disabled={locked}
+      className={`flex w-full flex-col gap-1 rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-teal/40 ${
+        locked
+          ? "cursor-not-allowed border-gray-100 bg-gray-50 opacity-60"
+          : "border-gray-200 bg-white hover:border-teal hover:bg-teal/5"
+      }`}
     >
       <span className="flex items-center gap-2 text-sm font-semibold text-navy">
         {title}
@@ -82,7 +90,7 @@ function ChoiceCard({
 export function TourProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { plan } = usePlan();
+  const { plan, isLoading: planLoading } = usePlan();
 
   const [session, setSession] = useState<Session | null>(null);
   const [resumePrompt, setResumePrompt] = useState<{ phase: TourPhase; lastStep: string | null } | null>(null);
@@ -274,15 +282,16 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
               />
               <ChoiceCard
                 title="Import a contract PDF (AI)"
-                description="Syntriq reads your contract and fills in the job for you."
+                description={
+                  !planLoading && plan !== "pro"
+                    ? "Available on the Pro plan."
+                    : "Syntriq reads your contract and fills in the job for you."
+                }
                 showPro
+                locked={!planLoading && plan !== "pro"}
                 onClick={() => {
-                  if (plan === "pro") {
-                    goTo("p1-ai");
-                    router.push("/job-setup");
-                  } else {
-                    setShowUpgrade(true);
-                  }
+                  goTo("p1-ai");
+                  router.push("/job-setup");
                 }}
               />
             </div>
