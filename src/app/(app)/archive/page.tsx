@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/InfoTip";
 import { useEffect, useState } from "react";
 import { DbJob, fetchArchivedJobs, unarchiveJob } from "@/lib/jobs";
 import { fetchPayApplicationsByJob, PayApplication } from "@/lib/payApplicationsDb";
@@ -110,7 +111,13 @@ export default function ArchivePage() {
     <div className="flex flex-col gap-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-navy">Archive</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-navy">Archive</h1>
+          <InfoTip title="Archive">
+            <p>Fully funded, closed-out jobs live here. They&apos;re read-only, and all of their history is kept.</p>
+            <p>A job lands here after you mark it fully funded from the Retention page. Use <strong>Unarchive</strong> only to fix a mistake.</p>
+          </InfoTip>
+        </div>
         <p className="mt-1 text-sm text-gray-500">
           Fully funded, closed-out jobs. Read-only — all history preserved.
         </p>

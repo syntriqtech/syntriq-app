@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/InfoTip";
 import { useState } from "react";
 import Link from "next/link";
 import KpiStrip from "@/components/KpiStrip";
@@ -77,7 +78,14 @@ export default function DashboardPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between">
         <div>
+          <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-navy">Dashboard</h1>
+          <InfoTip title="Your dashboard">
+            <p>This is your home base. The cards across the top show Active Projects, Total Contract Value, Billed to Date and what&apos;s Outstanding.</p>
+            <p>Below them you&apos;ll find change order exposure, your monthly billing check-in, open AR that&apos;s due, and anything that needs attention. Your active jobs are listed at the bottom. Click one to open it.</p>
+            <p><strong>+ New pay application</strong> starts a new pay app.</p>
+          </InfoTip>
+        </div>
           <p className="mt-1 text-sm text-gray-500">{today}</p>
         </div>
         <Link

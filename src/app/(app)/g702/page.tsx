@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/InfoTip";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useJobs } from "@/hooks/useJobs";
@@ -158,7 +159,17 @@ export default function G702Page() {
     <div className="flex flex-col gap-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
+          <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-navy">G702 Cover Sheet</h1>
+          <InfoTip title="G702 Cover Sheet">
+            <ol>
+              <li>Pick the job and the application number.</li>
+              <li>Review the cover sheet. Its numbers come from your Schedule of Values.</li>
+              <li>Press <strong>Download G702</strong> to save the PDF.</li>
+            </ol>
+            <p>It&apos;s the summary page of the pay application: contract sum, work completed, retainage and the current payment due.</p>
+          </InfoTip>
+        </div>
           <p className="mt-1 text-sm text-gray-500">Application & Certificate for Payment — summary of this period's billing.</p>
         </div>
         <div className="flex flex-wrap items-end gap-3">

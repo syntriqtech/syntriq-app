@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/InfoTip";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useJobs } from "@/hooks/useJobs";
@@ -291,7 +292,19 @@ export default function BillingCheckinPage() {
     <div className="flex flex-col gap-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-navy">Billing Check-in</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-navy">Billing Check-in</h1>
+          <InfoTip title="How the billing check-in works">
+            <p>Once a month, tell Syntriq which jobs you&apos;ll bill.</p>
+            <ol>
+              <li>Each job that&apos;s due for a check-in is listed under <strong>Pending</strong>.</li>
+              <li>Press <strong>Yes, billing this month</strong> if you&apos;ll bill it. Its next check-in moves to next month.</li>
+              <li>Press <strong>No, defer</strong> if you won&apos;t, then pick the month to check again.</li>
+            </ol>
+            <p>Jobs you said yes to stay under <strong>Billing this month</strong> until their pay app is made. Pressed the wrong button? Use <strong>Undo</strong>.</p>
+            <p>A job shows up here based on its <strong>Next billing check-in month</strong> in Job Setup.</p>
+          </InfoTip>
+        </div>
         <p className="mt-1 text-sm text-gray-500">
           {formatMonth(month)} · Review which jobs you'll be billing this month.
         </p>

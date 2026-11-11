@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/InfoTip";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useJobs } from "@/hooks/useJobs";
@@ -143,7 +144,14 @@ export default function BillingSummaryPage() {
     <div className="flex flex-col gap-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-navy">AR Aging Summary</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-navy">AR Aging Summary</h1>
+          <InfoTip title="AR Aging Summary">
+            <p>A bird&apos;s-eye view of what you&apos;re owed across all your jobs: billed to date, retention held, and open AR.</p>
+            <p>Each job&apos;s unpaid balance is sorted by age into Current, 31-60, 61-90 and 90+ days, so you can see what&apos;s overdue.</p>
+            <p>Use the sort menu and the filters (Has open AR, Overdue 90+, Retention ready, Not billed this month) to find what needs your attention first.</p>
+          </InfoTip>
+        </div>
         <p className="mt-1 text-sm text-gray-500">Portfolio overview: aging, collections, retention. Showing {filtered.length} of {rows.length} jobs.</p>
       </div>
 

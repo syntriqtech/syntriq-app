@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/InfoTip";
 import { useEffect, useState } from "react";
 import { useJobs } from "@/hooks/useJobs";
 import { SOVLineItem } from "@/lib/sovData";
@@ -196,7 +197,18 @@ export default function LienWaiversPage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-2xl font-bold text-navy">Lien Waivers</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-navy">Lien Waivers</h1>
+          <InfoTip title="Lien waivers">
+            <p>The four California statutory waiver and release forms, pre-filled from your job: conditional and unconditional, progress and final.</p>
+            <ol>
+              <li>Pick the job and application number.</li>
+              <li>Fill in the through date, the signing date, the check amount and the signer&apos;s name and title.</li>
+              <li>Adopt your signature once. It&apos;s stamped on every waiver you download.</li>
+            </ol>
+            <p>The final waivers have extra fields for disputed extras and unpaid progress payments. Only fill them in if they apply.</p>
+          </InfoTip>
+        </div>
         <p className="mt-1 text-sm text-gray-500">
           The four California statutory waiver and release forms (Civil Code §8132–8138), pre-filled from this job.
         </p>

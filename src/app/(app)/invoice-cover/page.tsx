@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/InfoTip";
 import { useEffect, useState } from "react";
 import { useJobs } from "@/hooks/useJobs";
 import { SOVLineItem } from "@/lib/sovData";
@@ -115,7 +116,17 @@ export default function InvoiceCoverPage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-2xl font-bold text-navy">Invoice Cover</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-navy">Invoice Cover</h1>
+          <InfoTip title="Invoice Cover">
+            <p>The cover sheet that goes out with every billing. It shows the job totals, retainage held and the current payment due.</p>
+            <ol>
+              <li>Pick the job and application number.</li>
+              <li>Check the dates and addresses.</li>
+              <li>Press <strong>Download Invoice Cover</strong>.</li>
+            </ol>
+          </InfoTip>
+        </div>
         <p className="mt-1 text-sm text-gray-500">The cover sheet that goes out with every billing — job totals, retainage, and current payment due.</p>
       </div>
 

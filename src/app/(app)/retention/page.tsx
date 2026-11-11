@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/InfoTip";
 import { Fragment, useEffect, useState } from "react";
 import { useJobs } from "@/hooks/useJobs";
 import { DbJob, fetchJobById } from "@/lib/jobs";
@@ -383,7 +384,14 @@ export default function RetentionPage() {
     <div className="flex flex-col gap-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-navy">Retention</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-navy">Retention</h1>
+          <InfoTip title="Retention">
+            <p>Retention is money a GC holds back from your payments until the job is done. This page tracks what&apos;s been held and released across all your active jobs.</p>
+            <p>The cards show what&apos;s held in total and what&apos;s available to release. Press <strong>Bill Retention</strong> on a job when you&apos;re ready to bill it, and record the payment when the money arrives. Release History keeps a record.</p>
+            <p>When a job is fully funded, mark it so it moves to the Archive.</p>
+          </InfoTip>
+        </div>
         <p className="mt-1 text-sm text-gray-500">
           Retainage held and released across all active jobs.
         </p>

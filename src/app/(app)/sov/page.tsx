@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/InfoTip";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useJobs } from "@/hooks/useJobs";
@@ -763,7 +764,13 @@ export default function ScheduleOfValuesPage() {
     return (
       <div className="flex flex-col gap-6">
         <div>
+          <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-navy">Create Pay App</h1>
+          <InfoTip title="Create a pay app">
+            <p>Pick the job you&apos;re billing this period. Search by job #, name or GC.</p>
+            <p>Then you can start the next pay app, or open an earlier one.</p>
+          </InfoTip>
+        </div>
           <p className="mt-1 text-sm text-gray-500">Select a job to enter billing for this period.</p>
         </div>
 
@@ -836,7 +843,13 @@ export default function ScheduleOfValuesPage() {
           >
             ← All Jobs
           </button>
+          <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-navy">Pay Applications</h1>
+          <InfoTip title="This job's pay applications">
+            <p>Every pay app for this job is listed here. Click one to edit it, or start the next application.</p>
+            <p>A certified pay app is locked. To correct an amount, start the next application instead.</p>
+          </InfoTip>
+        </div>
           <p className="mt-1 text-sm text-gray-500">Select an application to edit, or start a new one.</p>
         </div>
 
@@ -1090,7 +1103,14 @@ export default function ScheduleOfValuesPage() {
           >
             ← Back to Pay Applications
           </button>
+          <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-navy">Create Pay App</h1>
+          <InfoTip title="Enter this period's billing">
+            <p>Enter what you completed this period on each line of the Schedule of Values.</p>
+            <p>What you billed before carries forward automatically. Syntriq works out the totals, percent complete, balance to finish and retention for you.</p>
+            <p>You can download the SOV from this page.</p>
+          </InfoTip>
+        </div>
           <p className="mt-1 text-sm text-gray-500">Enter this period&apos;s billing for each line item.</p>
         </div>
         <div className="flex flex-wrap items-end gap-3">

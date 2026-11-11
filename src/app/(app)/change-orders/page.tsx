@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/InfoTip";
 import { useEffect, useState } from "react";
 import { useJobs } from "@/hooks/useJobs";
 import {
@@ -315,7 +316,13 @@ export default function ChangeOrdersPage() {
     return (
       <div className="flex flex-col gap-6">
         <div>
+          <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-navy">Change Orders</h1>
+          <InfoTip title="Change orders">
+            <p>Pick a job to see and manage its change orders. Change orders adjust the original contract, so each job shows its original contract, net change orders and revised contract.</p>
+            <p><strong>Import Change Order (AI)</strong> reads a change order file for you. Check what it fills in before you save.</p>
+          </InfoTip>
+        </div>
           <p className="mt-1 text-sm text-gray-500">Select a job to view and manage its change orders.</p>
         </div>
 
@@ -377,7 +384,13 @@ export default function ChangeOrdersPage() {
           >
             ← All Jobs
           </button>
+          <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-navy">Change Orders</h1>
+          <InfoTip title="This job's change orders">
+            <p>Add a new change order, or open one to review it or update its status.</p>
+            <p>Deleted change orders stay in Recently deleted, so you can restore one if you made a mistake.</p>
+          </InfoTip>
+        </div>
         </div>
         <button
           type="button"

@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/InfoTip";
 import Link from "next/link";
 import { REPORT_DEFINITIONS } from "@/lib/reportsData";
 
@@ -7,7 +8,13 @@ export default function ReportsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-navy">Reports</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-navy">Reports</h1>
+          <InfoTip title="Reports">
+            <p>Ready-to-share reports built from your billing, AR and retention data.</p>
+            <p>Press <strong>View report</strong> on one to open it. Reports marked Coming soon aren&apos;t available yet.</p>
+          </InfoTip>
+        </div>
         <p className="mt-1 text-sm text-gray-500">
           Pull ready-to-share reports from your existing billing, AR, and retention data.
         </p>

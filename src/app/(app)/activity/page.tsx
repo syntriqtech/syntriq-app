@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/InfoTip";
 import { useEffect, useState } from "react";
 import { ActivityLogEntry, fetchActivityLog } from "@/lib/activityLogDb";
 import { fetchOrganizationMembers } from "@/lib/organizationMembersDb";
@@ -83,7 +84,13 @@ export default function ActivityPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-navy">Activity</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-navy">Activity</h1>
+          <InfoTip title="Activity log">
+            <p>A record of what&apos;s happened in your company&apos;s account, such as creating a job or recording a payment.</p>
+            <p>Only the account owner can see this page.</p>
+          </InfoTip>
+        </div>
         <p className="mt-1 text-sm text-gray-500">A record of what&apos;s happened across your company&apos;s account.</p>
       </div>
 

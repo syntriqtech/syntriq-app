@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/InfoTip";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useJobs } from "@/hooks/useJobs";
 import { SOVLineItem } from "@/lib/sovData";
@@ -632,7 +633,17 @@ export default function DownloadPackagePage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-2xl font-bold text-navy">Download Package</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-navy">Download Package</h1>
+          <InfoTip title="Download Package">
+            <p>Builds the whole billing package for one application: the pay application, the invoice cover and the lien waivers. You sign once and download a single file.</p>
+            <ol>
+              <li>Pick the job, the application and your billing form.</li>
+              <li>Review the checks. Syntriq warns you if something looks off, like stored materials or a retention release.</li>
+              <li>Sign, then download.</li>
+            </ol>
+          </InfoTip>
+        </div>
         <p className="mt-1 text-sm text-gray-500">
           Build the full billing package for one application — pay application, invoice cover, and lien waivers — sign once, download one file.
         </p>
