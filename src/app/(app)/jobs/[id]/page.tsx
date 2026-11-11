@@ -10,6 +10,7 @@ import { fetchPayAppPayments } from "@/lib/payAppPaymentsDb";
 import { fetchChangeOrders, ChangeOrder, ChangeOrderStatus } from "@/lib/changeOrdersDb";
 import { fetchRetentionReleases, RetentionRelease } from "@/lib/retentionReleasesDb";
 import DonutPercent from "@/components/DonutPercent";
+import JobsTutorial, { useJobsTutorial } from "@/components/JobsTutorial";
 import { formatDate } from "@/lib/dateUtils";
 
 // ── Formatters ───────────────────────────────────────────────────────────────
@@ -139,6 +140,7 @@ export default function JobDetailPage() {
   const params = useParams();
   const jobId = params.id as string;
   const router = useRouter();
+  const tutorial = useJobsTutorial("detail");
 
   const { jobs, isLoading: isLoadingJobs } = useJobs();
   const job = jobs.find((j) => j.id === jobId) ?? null;
@@ -267,7 +269,7 @@ export default function JobDetailPage() {
       </Link>
 
       {/* Header card */}
-      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+      <div data-tour="job-header" className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex-1">
             {/* Job name + status */}
@@ -321,6 +323,7 @@ export default function JobDetailPage() {
             <div className="mt-5 flex flex-wrap gap-3">
               <button
                 type="button"
+                data-tour="job-view-sov"
                 onClick={handleViewSov}
                 className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-semibold text-navy hover:bg-gray-50"
               >
@@ -328,6 +331,7 @@ export default function JobDetailPage() {
               </button>
               <button
                 type="button"
+                data-tour="job-create-payapp"
                 onClick={handleCreatePayApp}
                 className="rounded-lg bg-teal px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal/90"
               >
@@ -350,7 +354,7 @@ export default function JobDetailPage() {
         </div>
 
         {!isLoading && (
-          <div className="mt-4 flex flex-col gap-2 border-t border-gray-100 pt-4">
+          <div data-tour="job-bars" className="mt-4 flex flex-col gap-2 border-t border-gray-100 pt-4">
             <LabeledBar
               label="Contract"
               percent={contractPercent}
@@ -374,7 +378,7 @@ export default function JobDetailPage() {
         {/* Left: pay apps + change orders */}
         <div className="flex flex-col gap-6 lg:col-span-2">
           {/* Pay Applications */}
-          <div className="rounded-2xl border border-gray-100 bg-white shadow-sm">
+          <div data-tour="job-payapps" className="rounded-2xl border border-gray-100 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
               <h2 className="text-base font-bold text-navy">Pay Applications</h2>
               <button
@@ -458,7 +462,7 @@ export default function JobDetailPage() {
           </div>
 
           {/* Change Orders */}
-          <div className="rounded-2xl border border-gray-100 bg-white shadow-sm">
+          <div data-tour="job-change-orders" className="rounded-2xl border border-gray-100 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
               <h2 className="text-base font-bold text-navy">Change Orders</h2>
               <Link
@@ -511,7 +515,7 @@ export default function JobDetailPage() {
           </div>
 
           {/* Retention */}
-          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+          <div data-tour="job-retention" className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-bold text-navy">Retention</h2>
               <Link
@@ -697,6 +701,7 @@ export default function JobDetailPage() {
           </div>
         </div>
       </div>
+      <JobsTutorial page="detail" step={tutorial.step} go={tutorial.go} />
     </div>
   );
 }

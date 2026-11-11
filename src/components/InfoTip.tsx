@@ -9,13 +9,15 @@ type InfoTipProps = {
   children: ReactNode;
   /** Which way the popup opens. Use "right" for icons near the left edge of the page. */
   align?: "left" | "right";
+  /** Optional button under the text, e.g. "Show me step by step". Closes the popup when clicked. */
+  action?: { label: string; onClick: () => void };
 };
 
 /**
  * A small "i" icon. Click it to open a short how-to popup; click anywhere
  * else (or press Escape) to close it. Reuse this anywhere in the app.
  */
-export default function InfoTip({ title, children, align = "left" }: InfoTipProps) {
+export default function InfoTip({ title, children, align = "left", action }: InfoTipProps) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLSpanElement>(null);
   const popupId = useId();
@@ -61,6 +63,18 @@ export default function InfoTip({ title, children, align = "left" }: InfoTipProp
           <div className="mt-1.5 space-y-1.5 text-sm font-normal leading-snug text-gray-600 [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:space-y-1">
             {children}
           </div>
+          {action && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                action.onClick();
+              }}
+              className="mt-3 w-full rounded-lg bg-teal px-3 py-2 text-sm font-semibold text-white hover:bg-teal/90"
+            >
+              {action.label}
+            </button>
+          )}
         </div>
       )}
     </span>

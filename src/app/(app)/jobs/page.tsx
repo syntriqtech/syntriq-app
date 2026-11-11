@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useJobs } from "@/hooks/useJobs";
 import { computeAllJobMetrics } from "@/lib/dashboardMetrics";
 import DonutPercent from "@/components/DonutPercent";
+import InfoTip from "@/components/InfoTip";
+import JobsTutorial, { useJobsTutorial } from "@/components/JobsTutorial";
 
 function extractCity(address: string): string {
   if (!address) return "—";
@@ -40,6 +42,7 @@ export default function JobsPage() {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"jobNumber" | "percent">("jobNumber");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const tutorial = useJobsTutorial("list");
 
   useEffect(() => {
     if (isLoadingJobs) return;
@@ -106,7 +109,21 @@ export default function JobsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-navy">Jobs</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-navy">Jobs</h1>
+          <InfoTip
+            title="Your jobs"
+            action={
+              sorted.length > 0
+                ? { label: "Show me step by step", onClick: () => tutorial.go(0) }
+                : undefined
+            }
+          >
+            <p>This list shows all your active projects, one per row. Search by job #, name or GC, or sort by job # or % billed.</p>
+            <p>Click a row to open that job and see its pay apps, change orders and retention.</p>
+            {sorted.length === 0 && <p>Once you add a job, a step-by-step walkthrough shows up here.</p>}
+          </InfoTip>
+        </div>
         <p className="mt-1 text-sm text-gray-500">
           Active projects — click a row to view details.
         </p>
@@ -151,7 +168,7 @@ export default function JobsPage() {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
+      <div data-tour="jobs-table" className="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-gray-100 text-gray-500">
@@ -184,7 +201,11 @@ export default function JobsPage() {
                 <tr
                   key={row.id}
                   className="cursor-pointer transition-colors hover:bg-gray-50"
-                  onClick={() => router.push(`/jobs/${row.id}`)}
+                  onClick={() => {
+                    // Mid-tutorial, picking a job carries the tutorial on to that job's page.
+                    if (tutorial.step === 0) tutorial.go(1);
+                    router.push(`/jobs/${row.id}`);
+                  }}
                 >
                   <td className="px-6 py-4">
                     <div className="font-semibold text-navy">
@@ -216,6 +237,12 @@ export default function JobsPage() {
           </tbody>
         </table>
       </div>
+      <JobsTutorial
+        page="list"
+        step={tutorial.step}
+        go={tutorial.go}
+        firstJobHref={sorted[0] ? `/jobs/${sorted[0].id}` : undefined}
+      />
     </div>
   );
 }
